@@ -9,7 +9,7 @@ import {
   VStack,
   Heading,
   Text,
-  Alert // Note: AlertIcon is removed from this list
+  Alert
 } from '@chakra-ui/react';
 
 export default function Auth() {
@@ -56,7 +56,6 @@ export default function Auth() {
         <Heading>Big Ten Pick 'em</Heading>
         <Text>Sign in or create an account.</Text>
 
-        {/* The <AlertIcon /> component is removed from here */}
         {error && <Alert status="error">{error}</Alert>}
         {message && <Alert status="success">{message}</Alert>}
 

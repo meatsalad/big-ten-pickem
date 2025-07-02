@@ -4,3 +4,9 @@
 
 [functions]
   directory = "netlify/functions"
+
+# Add this new section to schedule the function
+[functions.schedule]
+  # This is a cron expression that means "at 11:59 PM on Monday"
+  cron = "59 23 * * 1"
+  function = "fetch-weekly-games"
