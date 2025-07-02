@@ -1,0 +1,21 @@
+// This file contains the list of all Big Ten teams and their official branding colors.
+export const BIG_TEN_TEAMS = [
+  { name: "Illinois Fighting Illini", colors: { primary: "#E84A27", secondary: "#13294B" } },
+  { name: "Indiana Hoosiers", colors: { primary: "#990000", secondary: "#EEEDEB" } },
+  { name: "Iowa Hawkeyes", colors: { primary: "#FFCD00", secondary: "#000000" } },
+  { name: "Maryland Terrapins", colors: { primary: "#E03A3E", secondary: "#FFD520" } },
+  { name: "Michigan Wolverines", colors: { primary: "#00274C", secondary: "#FFCB05" } },
+  { name: "Michigan State Spartans", colors: { primary: "#18453B", secondary: "#FFFFFF" } },
+  { name: "Minnesota Golden Gophers", colors: { primary: "#7A0019", secondary: "#FFCC33" } },
+  { name: "Nebraska Cornhuskers", colors: { primary: "#E41C38", secondary: "#FDFDFD" } },
+  { name: "Northwestern Wildcats", colors: { primary: "#4E2A84", secondary: "#FFFFFF" } },
+  { name: "Ohio State Buckeyes", colors: { primary: "#BB0000", secondary: "#666666" } },
+  { name: "Oregon Ducks", colors: { primary: "#154733", secondary: "#FEE123" } },
+  { name: "Penn State Nittany Lions", colors: { primary: "#041E42", secondary: "#FFFFFF" } },
+  { name: "Purdue Boilermakers", colors: { primary: "#CEB888", secondary: "#000000" } },
+  { name: "Rutgers Scarlet Knights", colors: { primary: "#CC0033", secondary: "#000000" } },
+  { name: "UCLA Bruins", colors: { primary: "#2774AE", secondary: "#F2A900" } },
+  { name: "USC Trojans", colors: { primary: "#990000", secondary: "#FFC72C" } },
+  { name: "Washington Huskies", colors: { primary: "#4B2E83", secondary: "#B7A57A" } },
+  { name: "Wisconsin Badgers", colors: { primary: "#C5050C", secondary: "#FFFFFF" } },
+];

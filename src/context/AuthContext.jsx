@@ -6,40 +6,53 @@ const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Function to fetch the user's profile data
+  const refreshProfile = async () => {
+    if (user) {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('username, avatar_url, favorite_team')
+        .eq('id', user.id)
+        .single();
+      setProfile(profileData || null);
+    }
+  };
+
   useEffect(() => {
-    // Get the initial session
-    const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
-    };
 
-    getSession();
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        (_event, session) => {
+          setSession(session);
+          setUser(session?.user ?? null);
+        }
+      );
 
-    // Listen for changes in authentication state (login, logout)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-      }
-    );
-
-    // Cleanup the subscription when the component unmounts
-    return () => {
-      subscription?.unsubscribe();
-    };
+      return () => {
+        subscription?.unsubscribe();
+      };
+    });
   }, []);
+
+  useEffect(() => {
+    // Fetch profile whenever the user object changes
+    refreshProfile();
+  }, [user]);
 
   const value = {
     session,
     user,
+    profile,
+    refreshProfile, // <-- Expose the refresh function to the app
     signOut: () => supabase.auth.signOut(),
   };
 
-  // Render children only once loading is complete
   return (
     <AuthContext.Provider value={value}>
       {!loading && children}
@@ -47,7 +60,6 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-// Custom hook to use the auth context
 export const useAuth = () => {
   return useContext(AuthContext);
 };

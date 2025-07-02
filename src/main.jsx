@@ -2,18 +2,64 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import './index.css';
-import { AuthProvider } from './context/AuthContext.jsx';
-import { ChakraProvider } from '@chakra-ui/react';
-import { BrowserRouter } from 'react-router-dom'; // <-- Import BrowserRouter
+import { AuthProvider, useAuth } from './context/AuthContext.jsx';
+import { ChakraProvider, extendTheme } from '@chakra-ui/react';
+import { BrowserRouter } from 'react-router-dom';
+import { BIG_TEN_TEAMS } from './lib/teams.js';
+
+// This new component creates the dynamic theme
+const ThemedApp = () => {
+  const { profile } = useAuth();
+
+  const selectedTeam = BIG_TEN_TEAMS.find(
+    (team) => team.name === profile?.favorite_team
+  );
+
+  // Define a default theme
+  let themeConfig = {
+    colors: {
+      brand: {
+        500: '#008cfa', // Default blue
+      },
+    },
+    // Add custom component styles
+    components: {
+      Navbar: { // We're creating a custom component variant called "Navbar"
+        baseStyle: {
+          bg: 'gray.800', // Default background
+          color: 'white',   // Default text color
+        },
+      },
+    },
+  };
+
+  // If a favorite team is selected, override the defaults
+  if (selectedTeam) {
+    themeConfig.colors.brand = {
+      500: selectedTeam.colors.primary,
+    };
+    // Override the navbar style with team colors
+    themeConfig.components.Navbar.baseStyle = {
+      bg: selectedTeam.colors.primary,
+      color: selectedTeam.colors.secondary,
+    };
+  }
+
+  const theme = extendTheme(themeConfig);
+
+  return (
+    <ChakraProvider theme={theme}>
+      <App />
+    </ChakraProvider>
+  );
+};
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter> {/* <-- Wrap your app */}
-      <ChakraProvider>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </ChakraProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <ThemedApp />
+      </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>
 );

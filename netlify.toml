@@ -5,6 +5,11 @@
 [functions]
   directory = "netlify/functions"
 
-  # This is the corrected syntax for scheduling a specific function
+  # This function fetches upcoming games once a week
   [functions."fetch-weekly-games"]
-    schedule = "59 23 * * 1"
+    schedule = "59 23 * * 1" # Monday at 11:59 PM
+
+  # This new function fetches live scores every hour on the weekend
+  [functions."update-live-scores"]
+    # UPDATED: Now runs every hour on Friday, Saturday, and Sunday
+    schedule = "0 * * * 5,6,0" 
