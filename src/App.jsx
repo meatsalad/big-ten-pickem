@@ -7,8 +7,7 @@ import Leaderboard from './components/Leaderboard.jsx';
 import Stats from './components/Stats.jsx';
 import Rules from './components/Rules.jsx';
 import Account from './components/Account.jsx';
-import CompactStats from './components/CompactStats.jsx';
-import TopBar from './components/TopBar.jsx'; // <-- Import the new TopBar
+import TopBar from './components/TopBar.jsx';
 
 import {
   Box,
@@ -26,19 +25,19 @@ import {
   Tooltip,
 } from '@chakra-ui/react';
 
+// Import icons from the new library
 import {
   FaTrophy,
   FaClipboardList,
   FaChartBar,
   FaBook,
-  FaUserCog,
   FaSignOutAlt,
-  FaChevronLeft,
-  FaChevronRight,
+  FaAngleDoubleLeft,
+  FaAngleDoubleRight,
 } from 'react-icons/fa';
 
 // A reusable NavItem component for our sidebar links
-const NavItem = ({ icon, children, to, isCollapsed, ...rest }) => {
+const NavItem = ({ icon, children, to, isCollapsed }) => {
   const location = useLocation();
   const isActive = location.pathname === to;
 
@@ -48,14 +47,13 @@ const NavItem = ({ icon, children, to, isCollapsed, ...rest }) => {
         as={RouterLink}
         to={to}
         w="full"
-        bg={isActive ? 'whiteAlpha.400' : 'transparent'}
-        _hover={{ bg: 'whiteAlpha.200' }}
+        bg={isActive ? 'whiteAlpha.300' : 'transparent'}
+        _hover={{ bg: 'whiteAlpha.100' }}
         p={3}
         borderRadius="md"
-        {...rest}
       >
         <Flex align="center">
-          <Box as={icon} fontSize="xl" />
+          <Box as={icon} fontSize="xl" mx={isCollapsed ? 'auto' : '0'} />
           {!isCollapsed && (
             <Text ml={4} fontSize="md">
               {children}
@@ -74,44 +72,61 @@ function AppShell() {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
-    // The main container is now a vertical Flexbox
     <Flex h="100vh" direction="column" bg="gray.50">
-      <TopBar /> {/* <-- The new top bar is added here */}
+      <TopBar />
       
-      {/* This Flex container holds the sidebar and main content */}
       <Flex flex="1" overflow="hidden">
         {/* Sidebar Navigation */}
         <Flex
           as="nav"
           __css={navStyles}
-          w={isCollapsed ? '80px' : '250px'}
+          w={isCollapsed ? '80px' : '260px'}
           h="full"
           direction="column"
           p={4}
-          transition="width 0.2s"
+          transition="width 0.2s ease-in-out"
         >
-          <VStack spacing={4} align="stretch" flex="1">
-            <Heading size="md" mb={4}>
-              {isCollapsed ? "B10" : "Big Ten Pick 'em"}
-            </Heading>
+          {/* Header and Toggle Button */}
+          <Flex align="center" justify="space-between" mb={6}>
+            {!isCollapsed && <Heading size="md" whiteSpace="nowrap">Big Ten Pick 'em</Heading>}
+            <IconButton
+              icon={isCollapsed ? <FaAngleDoubleRight /> : <FaAngleDoubleLeft />}
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              aria-label="Toggle Sidebar"
+              bg="transparent"
+              color="white"
+              _hover={{ bg: 'whiteAlpha.200' }}
+              isRound
+            />
+          </Flex>
+
+          {/* Navigation Links */}
+          <VStack spacing={2} align="stretch" flex="1">
             <NavItem to="/" icon={FaTrophy} isCollapsed={isCollapsed}>Leaderboard</NavItem>
             <NavItem to="/picks" icon={FaClipboardList} isCollapsed={isCollapsed}>Picks</NavItem>
             <NavItem to="/stats" icon={FaChartBar} isCollapsed={isCollapsed}>Stats</NavItem>
             <NavItem to="/rules" icon={FaBook} isCollapsed={isCollapsed}>Rules</NavItem>
-            <NavItem to="/account" icon={FaUserCog} isCollapsed={isCollapsed}>Account</NavItem>
           </VStack>
 
-          {/* User Info & Logout at the bottom of the sidebar */}
-          <VStack spacing={4} align="stretch">
-            <Divider />
-            <HStack>
-              <Avatar
-                size="sm"
-                name={profile?.username || user?.email}
-                src={profile?.avatar_url}
-              />
-              {!isCollapsed && <Text fontSize="sm">{profile?.username || user?.email}</Text>}
-            </HStack>
+          {/* User Info & Logout at the bottom */}
+          <VStack spacing={3} align="stretch">
+            <Divider borderColor="whiteAlpha.400" />
+            <Link
+              as={RouterLink}
+              to="/account"
+              _hover={{ textDecoration: 'none', bg: 'whiteAlpha.100' }}
+              p={2}
+              borderRadius="md"
+            >
+              <HStack>
+                <Avatar
+                  size="sm"
+                  name={profile?.username || user?.email}
+                  src={profile?.avatar_url}
+                />
+                {!isCollapsed && <Text fontSize="sm" noOfLines={1}>{profile?.username || user?.email}</Text>}
+              </HStack>
+            </Link>
             <Button
               leftIcon={<FaSignOutAlt />}
               colorScheme="brand"
@@ -125,13 +140,6 @@ function AppShell() {
 
         {/* Main Content Area */}
         <Box flex="1" p={8} overflowY="auto">
-          <IconButton
-            icon={isCollapsed ? <FaChevronRight /> : <FaChevronLeft />}
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            aria-label="Toggle Sidebar"
-            mb={4}
-            borderRadius="full"
-          />
           <Outlet />
         </Box>
       </Flex>
