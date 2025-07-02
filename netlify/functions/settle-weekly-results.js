@@ -9,12 +9,30 @@ const getPreviousNCAAFWeek = () => {
   return week > 1 ? week - 1 : 1;
 };
 
-exports.handler = async function() {
+exports.handler = async function(event) {
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
   const supabase = createClient(supabaseUrl, supabaseKey);
 
-  const weekToSettle = getPreviousNCAAFWeek();
+  let weekToSettle;
+
+  // Check if a week was passed in the event body (from a manual trigger)
+  if (event.body) {
+    try {
+      const body = JSON.parse(event.body);
+      weekToSettle = body.week;
+    } catch (e) {
+      // Fallback for scheduled trigger if body is invalid
+      weekToSettle = getPreviousNCAAFWeek();
+    }
+  } else {
+    // Fallback for scheduled trigger
+    weekToSettle = getPreviousNCAAFWeek();
+  }
+
+  if (!weekToSettle) {
+      return { statusCode: 400, body: 'Week to settle is not defined.' };
+  }
 
   try {
     // 1. Get all picks and game data for the week
@@ -44,7 +62,7 @@ exports.handler = async function() {
         acc[pick.user_id].correctPicks++;
       }
       // Store tiebreaker prediction if it exists
-      if (pick.predicted_home_score !== null) {
+      if (pick.predicted_home_score !== null && pick.games) {
         const game = pick.games;
         const diff = Math.abs(pick.predicted_home_score - game.home_team_score) + Math.abs(pick.predicted_away_score - game.away_team_score);
         acc[pick.user_id].tiebreakerDiff = diff;
@@ -78,16 +96,16 @@ exports.handler = async function() {
     } else if (potentialPoopstars.length > 1) {
       const maxTiebreaker = Math.max(...potentialPoopstars.map(u => u.tiebreakerDiff).filter(d => d !== Infinity));
       poopstars = potentialPoopstars.filter(u => u.tiebreakerDiff === maxTiebreaker);
-      if (poopstars.length === 0) { // If all tied poopstars had no tiebreaker score
+      if (poopstars.length === 0) {
           poopstars = potentialPoopstars;
       }
     }
 
     // 5. Prepare results for insertion
     const weeklyResults = scoresArray.map(user => {
-      const isWinner = winners.some(w => w.userId === user.userId);
+      const isPerfect = user.correctPicks === totalGamesInWeek && totalGamesInWeek > 0;
+      const isWinner = winners.some(w => w.userId === user.userId) || isPerfect;
       const isPoopstar = poopstars.some(p => p.userId === user.userId);
-      const isPerfect = user.correctPicks === totalGamesInWeek;
       
       return {
         user_id: user.userId,
