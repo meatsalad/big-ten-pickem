@@ -4,13 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import {
   Box,
   Heading,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  TableContainer,
   Text,
   Badge,
   Button,
@@ -18,6 +11,20 @@ import {
   Spinner,
   HStack,
   Flex,
+  Accordion,
+  AccordionItem,
+  AccordionButton,
+  AccordionPanel,
+  AccordionIcon,
+  SimpleGrid,
+  Avatar,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  TableContainer,
   AlertDialog,
   AlertDialogBody,
   AlertDialogFooter,
@@ -27,15 +34,69 @@ import {
   useDisclosure,
 } from '@chakra-ui/react';
 import { StarIcon } from '@chakra-ui/icons';
+// Import Recharts components
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
 
-// Helper to get the PREVIOUS college football week
-const getPreviousNCAAFWeek = () => {
-  const now = new Date();
-  const seasonStart = new Date(now.getFullYear(), 7, 24); 
-  const week = Math.ceil((now - seasonStart) / (1000 * 60 * 60 * 24 * 7));
-  return week > 1 ? week - 1 : 1;
+// --- Sub-component for the stats chart ---
+const StatsChart = ({ data }) => {
+  const chartData = data.map(player => ({
+    name: player.username,
+    Wins: player.totalWins,
+    Poopstars: player.totalPoopstars,
+    Perfects: player.totalPerfectPicks,
+  }));
+
+  return (
+    <Box mt={10}>
+      <Heading size="lg" mb={4}>Season Stats</Heading>
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={chartData}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="name" />
+          <YAxis allowDecimals={false} />
+          <Tooltip />
+          <Legend />
+          <Bar dataKey="Wins" fill="#48BB78" />
+          <Bar dataKey="Poopstars" fill="#F56565" />
+          <Bar dataKey="Perfects" fill="#9F7AEA" />
+        </BarChart>
+      </ResponsiveContainer>
+    </Box>
+  );
 };
 
+// --- Sub-component for the totals table ---
+const TotalsTable = ({ data }) => {
+  return (
+    <Box mt={10}>
+        <Heading size="lg" mb={4}>Financials</Heading>
+        <TableContainer>
+            <Table variant="simple" size="sm">
+                <Thead>
+                    <Tr>
+                        <Th>Player</Th>
+                        <Th isNumeric>$$$ Won</Th>
+                        <Th isNumeric>$$$ Paid</Th>
+                        <Th isNumeric>Season Net</Th>
+                    </Tr>
+                </Thead>
+                <Tbody>
+                    {data.map(player => (
+                        <Tr key={player.id}>
+                            <Td>{player.username}</Td>
+                            <Td isNumeric color="green.500">${player.totalWinnings}</Td>
+                            <Td isNumeric color="red.500">${player.totalPaid}</Td>
+                            <Td isNumeric fontWeight="bold">${player.totalWinnings - player.totalPaid}</Td>
+                        </Tr>
+                    ))}
+                </Tbody>
+            </Table>
+        </TableContainer>
+    </Box>
+  )
+}
+
+// --- Main Leaderboard Component ---
 export default function Leaderboard() {
   const { user } = useAuth();
   const toast = useToast();
@@ -49,23 +110,55 @@ export default function Leaderboard() {
 
   const fetchData = async () => {
     setLoading(true);
-    const { data: profiles } = await supabase.from('profiles').select('id, username');
-    const { data: weeklyResults } = await supabase.from('weekly_results').select('*');
+    const [profilesRes, weeklyResultsRes] = await Promise.all([
+      supabase.from('profiles').select('id, username, avatar_url'),
+      supabase.from('weekly_results').select('*')
+    ]);
 
-    if (profiles && weeklyResults) {
-        const processedData = profiles.map((profile) => {
-          const userResults = weeklyResults.filter(r => r.user_id === profile.id);
-          const totalWins = userResults.filter(r => r.is_winner).length;
-          const totalPoopstars = userResults.filter(r => r.is_poopstar).length;
-          const totalPerfectPicks = userResults.filter(r => r.is_perfect).length;
-          const weekly = userResults.reduce((acc, result) => {
-            acc[result.week] = result;
-            return acc;
-          }, {});
-          return { ...profile, totalWins, totalPoopstars, totalPerfectPicks, weekly };
-        });
-        setLeaderboardData(processedData);
+    if (profilesRes.error || weeklyResultsRes.error) {
+      console.error('Error fetching data:', profilesRes.error || weeklyResultsRes.error);
+      setLoading(false);
+      return;
     }
+
+    const profiles = profilesRes.data;
+    const weeklyResults = weeklyResultsRes.data;
+    const playerCount = profiles.length;
+
+    const processedData = profiles.map((profile) => {
+      const userWeeklyResults = weeklyResults.filter(r => r.user_id === profile.id);
+
+      const totalWins = userWeeklyResults.filter(r => r.is_winner).length;
+      const totalPoopstars = userWeeklyResults.filter(r => r.is_poopstar).length;
+      const totalPerfectPicks = userWeeklyResults.filter(r => r.is_perfect).length;
+      
+      let totalWinnings = 0;
+      let totalPaid = 0;
+
+      for (let week = 1; week <= totalWeeks; week++) {
+          const weekResult = userWeeklyResults.find(r => r.week === week);
+          if (!weekResult) continue;
+
+          const potSize = weeklyResults.some(r => r.week === week && r.is_perfect) ? 20 : 10;
+          const losersCount = playerCount - weeklyResults.filter(r => r.week === week && r.is_winner).length;
+          
+          if (weekResult.is_winner) {
+              totalWinnings += potSize * losersCount;
+          } else {
+              totalPaid += potSize;
+          }
+      }
+
+      const weekly = userWeeklyResults.reduce((acc, result) => {
+        acc[result.week] = result;
+        return acc;
+      }, {});
+
+      return { ...profile, totalWins, totalPoopstars, totalPerfectPicks, weekly, totalWinnings, totalPaid };
+    });
+
+    processedData.sort((a, b) => b.totalWins - a.totalWins);
+    setLeaderboardData(processedData);
     setLoading(false);
   };
 
@@ -75,22 +168,20 @@ export default function Leaderboard() {
 
   const handleSettleWeek = async () => {
     setIsSettling(true);
-    const weekToSettle = getPreviousNCAAFWeek();
-    
     try {
-      const response = await fetch('/.netlify/functions/settle-weekly-results', {
+      const response = await fetch('/.netlify/functions/settle-most-recent-week', {
         method: 'POST',
-        body: JSON.stringify({ week: weekToSettle }),
       });
+      const result = await response.json();
 
       if (!response.ok) {
-        throw new Error('Failed to settle week.');
+        throw new Error(result.error || 'Failed to settle week.');
       }
 
-      toast({ title: `Week ${weekToSettle} settled!`, status: 'success' });
-      fetchData(); // Refresh the leaderboard
+      toast({ title: 'Success!', description: result, status: 'success', duration: 5000, isClosable: true });
+      fetchData(); // Refresh the leaderboard data
     } catch (error) {
-      toast({ title: 'Error settling week', description: error.message, status: 'error' });
+      toast({ title: 'Error Settling Week', description: error.message, status: 'error', duration: 5000, isClosable: true });
     } finally {
       setIsSettling(false);
       onClose();
@@ -135,47 +226,49 @@ export default function Leaderboard() {
     return <Badge colorScheme="red">Needs to Pay</Badge>;
   };
 
-  if (loading) return <Spinner />;
+  if (loading) {
+    return <Spinner />;
+  }
 
   return (
     <Box w="100%">
       <Flex justify="space-between" align="center" mb={4}>
         <Heading size="lg">Leaderboard</Heading>
         <Button colorScheme="teal" onClick={onOpen} isLoading={isSettling}>
-          Settle Week {getPreviousNCAAFWeek()}
+          Settle Most Recent Week
         </Button>
       </Flex>
       
-      <TableContainer>
-        <Table variant="simple" size="sm">
-          <Thead>
-            <Tr>
-              <Th>Player</Th>
-              <Th isNumeric>Wins</Th>
-              <Th isNumeric>Poopstars</Th>
-              <Th isNumeric>Perfects</Th>
-              {Array.from({ length: totalWeeks }, (_, i) => i + 1).map((week) => (
-                <Th key={week} isNumeric>Wk {week}</Th>
-              ))}
-            </Tr>
-          </Thead>
-          <Tbody>
-            {leaderboardData.map((player) => (
-              <Tr key={player.id}>
-                <Td fontWeight="bold">{player.username}</Td>
-                <Td isNumeric>{player.totalWins}</Td>
-                <Td isNumeric>{player.totalPoopstars}</Td>
-                <Td isNumeric>{player.totalPerfectPicks}</Td>
+      <Accordion allowMultiple>
+        {leaderboardData.map((player, index) => (
+          <AccordionItem key={player.id}>
+            <h2>
+              <AccordionButton>
+                <HStack flex="1" textAlign="left" spacing={4}>
+                  <Text fontWeight="bold" fontSize="xl" w="40px">#{index + 1}</Text>
+                  <Avatar size="sm" name={player.username} src={player.avatar_url} />
+                  <Text fontWeight="bold">{player.username}</Text>
+                  <Text fontSize="sm" color="gray.600">(Wins: {player.totalWins}, Poopstars: {player.totalPoopstars})</Text>
+                </HStack>
+                <AccordionIcon />
+              </AccordionButton>
+            </h2>
+            <AccordionPanel pb={4}>
+              <SimpleGrid columns={{ base: 2, sm: 4, md: 7 }} spacing={4}>
                 {Array.from({ length: totalWeeks }, (_, i) => i + 1).map((week) => (
-                  <Td key={`${player.id}-wk-${week}`} isNumeric>
+                  <Box key={week} textAlign="center">
+                    <Text fontWeight="bold" fontSize="sm">Wk {week}</Text>
                     {renderWeekStatus(player, week)}
-                  </Td>
+                  </Box>
                 ))}
-              </Tr>
-            ))}
-          </Tbody>
-        </Table>
-      </TableContainer>
+              </SimpleGrid>
+            </AccordionPanel>
+          </AccordionItem>
+        ))}
+      </Accordion>
+
+      <StatsChart data={leaderboardData} />
+      <TotalsTable data={leaderboardData} />
 
       <AlertDialog
         isOpen={isOpen}
@@ -185,17 +278,17 @@ export default function Leaderboard() {
         <AlertDialogOverlay>
           <AlertDialogContent>
             <AlertDialogHeader fontSize="lg" fontWeight="bold">
-              Settle Week {getPreviousNCAAFWeek()}
+              Confirm Settlement
             </AlertDialogHeader>
             <AlertDialogBody>
-              Are you sure all games for the week are complete? This action is irreversible and will finalize the results.
+              Are you sure you want to settle the most recent un-settled week? This will finalize the winner and poopstar.
             </AlertDialogBody>
             <AlertDialogFooter>
               <Button ref={cancelRef} onClick={onClose}>
                 Cancel
               </Button>
               <Button colorScheme="red" onClick={handleSettleWeek} ml={3}>
-                Confirm Settlement
+                Confirm
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>

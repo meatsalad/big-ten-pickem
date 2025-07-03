@@ -5,7 +5,6 @@ const getPreviousNCAAFWeek = () => {
   const now = new Date();
   const seasonStart = new Date(now.getFullYear(), 7, 24); 
   const week = Math.ceil((now - seasonStart) / (1000 * 60 * 60 * 24 * 7));
-  // We always want to settle the week that just passed
   return week > 1 ? week - 1 : 1;
 };
 
@@ -16,17 +15,14 @@ exports.handler = async function(event) {
 
   let weekToSettle;
 
-  // Check if a week was passed in the event body (from a manual trigger)
   if (event.body) {
     try {
       const body = JSON.parse(event.body);
       weekToSettle = body.week;
     } catch (e) {
-      // Fallback for scheduled trigger if body is invalid
       weekToSettle = getPreviousNCAAFWeek();
     }
   } else {
-    // Fallback for scheduled trigger
     weekToSettle = getPreviousNCAAFWeek();
   }
 
@@ -45,6 +41,16 @@ exports.handler = async function(event) {
       .eq('week', weekToSettle);
     if (picksError) throw picksError;
 
+    // --- NEW ROBUSTNESS CHECK ---
+    // If there are no picks for this week, there's nothing to do.
+    if (!picks || picks.length === 0) {
+      return {
+        statusCode: 200,
+        body: `No picks found for week ${weekToSettle}. Nothing to settle.`,
+      };
+    }
+    // --- END CHECK ---
+
     const { data: gamesInWeek } = await supabase.from('games').select('id').eq('week', weekToSettle);
     const totalGamesInWeek = gamesInWeek.length;
 
@@ -61,7 +67,6 @@ exports.handler = async function(event) {
       if (pick.is_correct) {
         acc[pick.user_id].correctPicks++;
       }
-      // Store tiebreaker prediction if it exists
       if (pick.predicted_home_score !== null && pick.games) {
         const game = pick.games;
         const diff = Math.abs(pick.predicted_home_score - game.home_team_score) + Math.abs(pick.predicted_away_score - game.away_team_score);
@@ -72,8 +77,7 @@ exports.handler = async function(event) {
     }, {});
 
     const scoresArray = Object.values(userScores);
-    if (scoresArray.length === 0) return { statusCode: 200, body: 'No picks to settle.' };
-
+    
     // 3. Determine Winners
     const maxScore = Math.max(...scoresArray.map(u => u.correctPicks));
     let potentialWinners = scoresArray.filter(u => u.correctPicks === maxScore);
@@ -113,7 +117,7 @@ exports.handler = async function(event) {
         is_winner: isWinner,
         is_poopstar: isPoopstar,
         is_perfect: isPerfect,
-        has_paid: isWinner, // Winners are marked as paid by default
+        has_paid: isWinner,
       };
     });
 
