@@ -32,8 +32,10 @@ import {
   AlertDialogContent,
   AlertDialogOverlay,
   useDisclosure,
+  Center,
+  VStack,
 } from '@chakra-ui/react';
-import { StarIcon } from '@chakra-ui/icons';
+import { StarIcon, InfoIcon } from '@chakra-ui/icons';
 // Import Recharts components
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
 
@@ -178,8 +180,8 @@ export default function Leaderboard() {
         throw new Error(result.error || 'Failed to settle week.');
       }
 
-      toast({ title: 'Success!', description: result, status: 'success', duration: 5000, isClosable: true });
-      fetchData(); // Refresh the leaderboard data
+      toast({ title: 'Success!', description: result.message, status: 'success', duration: 5000, isClosable: true });
+      fetchData();
     } catch (error) {
       toast({ title: 'Error Settling Week', description: error.message, status: 'error', duration: 5000, isClosable: true });
     } finally {
@@ -239,36 +241,48 @@ export default function Leaderboard() {
         </Button>
       </Flex>
       
-      <Accordion allowMultiple>
-        {leaderboardData.map((player, index) => (
-          <AccordionItem key={player.id}>
-            <h2>
-              <AccordionButton>
-                <HStack flex="1" textAlign="left" spacing={4}>
-                  <Text fontWeight="bold" fontSize="xl" w="40px">#{index + 1}</Text>
-                  <Avatar size="sm" name={player.username} src={player.avatar_url} />
-                  <Text fontWeight="bold">{player.username}</Text>
-                  <Text fontSize="sm" color="gray.600">(Wins: {player.totalWins}, Poopstars: {player.totalPoopstars})</Text>
-                </HStack>
-                <AccordionIcon />
-              </AccordionButton>
-            </h2>
-            <AccordionPanel pb={4}>
-              <SimpleGrid columns={{ base: 2, sm: 4, md: 7 }} spacing={4}>
-                {Array.from({ length: totalWeeks }, (_, i) => i + 1).map((week) => (
-                  <Box key={week} textAlign="center">
-                    <Text fontWeight="bold" fontSize="sm">Wk {week}</Text>
-                    {renderWeekStatus(player, week)}
-                  </Box>
-                ))}
-              </SimpleGrid>
-            </AccordionPanel>
-          </AccordionItem>
-        ))}
-      </Accordion>
+      {leaderboardData.length > 0 ? (
+        <>
+          <Accordion allowMultiple>
+            {leaderboardData.map((player, index) => (
+              <AccordionItem key={player.id}>
+                <h2>
+                  <AccordionButton>
+                    <HStack flex="1" textAlign="left" spacing={4}>
+                      <Text fontWeight="bold" fontSize="xl" w="40px">#{index + 1}</Text>
+                      <Avatar size="sm" name={player.username} src={player.avatar_url} />
+                      <Text fontWeight="bold">{player.username}</Text>
+                      <Text fontSize="sm" color="gray.600">(Wins: {player.totalWins}, Poopstars: {player.totalPoopstars})</Text>
+                    </HStack>
+                    <AccordionIcon />
+                  </AccordionButton>
+                </h2>
+                <AccordionPanel pb={4}>
+                  <SimpleGrid columns={{ base: 2, sm: 4, md: 7 }} spacing={4}>
+                    {Array.from({ length: totalWeeks }, (_, i) => i + 1).map((week) => (
+                      <Box key={week} textAlign="center">
+                        <Text fontWeight="bold" fontSize="sm">Wk {week}</Text>
+                        {renderWeekStatus(player, week)}
+                      </Box>
+                    ))}
+                  </SimpleGrid>
+                </AccordionPanel>
+              </AccordionItem>
+            ))}
+          </Accordion>
 
-      <StatsChart data={leaderboardData} />
-      <TotalsTable data={leaderboardData} />
+          <StatsChart data={leaderboardData} />
+          <TotalsTable data={leaderboardData} />
+        </>
+      ) : (
+        <Center p={10} borderWidth="1px" borderRadius="lg" bg="gray.50">
+          <VStack>
+            <InfoIcon boxSize="50px" color="blue.500" />
+            <Heading size="md" mt={4}>The Season is Just Getting Started!</Heading>
+            <Text>The leaderboard will populate here after the first week is settled.</Text>
+          </VStack>
+        </Center>
+      )}
 
       <AlertDialog
         isOpen={isOpen}

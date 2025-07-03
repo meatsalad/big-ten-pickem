@@ -97,7 +97,7 @@ const Countdown = ({ lockTime }) => {
 // --- Main Component ---
 export default function GameList() {
   const { user } = useAuth();
-  const [selectedWeek, setSelectedWeek] = useState(getCurrentNCAAFWeek());
+  const [selectedWeek, setSelectedWeek] = useState(1); // Start at Week 1 by default
   const [weekData, setWeekData] = useState({ games: [], players: [], picks: [] });
   const [firstKickoff, setFirstKickoff] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -206,7 +206,7 @@ export default function GameList() {
           icon={<ChevronRightIcon />}
           onClick={() => setSelectedWeek(prev => prev + 1)}
           aria-label="Next Week"
-          isDisabled={isCurrentWeek || isLocked}
+          isDisabled={selectedWeek >= 14} // <-- Corrected Logic
         />
       </Flex>
 

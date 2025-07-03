@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import CompactStats from './CompactStats';
 import {
-  Box, // Use Box as the main container
+  Box,
   Stat,
   StatLabel,
   StatNumber,
@@ -36,22 +36,30 @@ export default function TopBar() {
     fetchSummaryStats();
   }, [user]);
 
+  // Main container uses Box for simpler centering
+  const MainContainer = ({ children }) => (
+    <Box as="header" p={2} __css={navStyles}>
+      <HStack spacing={8} mx="auto" width="fit-content">
+        {children}
+      </HStack>
+    </Box>
+  );
+
   if (!stats) {
     return (
-      <Box as="header" p={2} __css={navStyles} textAlign="center">
+      <MainContainer>
         <Spinner size="sm" />
-      </Box>
+      </MainContainer>
     );
   }
 
-  const winPercentage = stats.total_picks > 0
-    ? ((stats.correct_picks / stats.total_picks) * 100).toFixed(1)
+  const totalWeeksPlayed = (stats.weeks_won || 0) + (stats.weeks_lost || 0);
+  const winPercentage = totalWeeksPlayed > 0
+    ? ((stats.weeks_won / totalWeeksPlayed) * 100).toFixed(0)
     : 0;
 
   return (
-    <Box as="header" p={2} __css={navStyles}>
-      {/* This HStack is now centered using auto horizontal margins */}
-      <HStack spacing={8} mx="auto" width="fit-content">
+    <MainContainer>
         <Stat>
           <StatLabel>Rank</StatLabel>
           <StatNumber>#{stats.rank}</StatNumber>
@@ -59,7 +67,7 @@ export default function TopBar() {
         <Divider orientation="vertical" h="30px" />
         <Stat>
           <StatLabel>Record</StatLabel>
-          <StatNumber>{stats.correct_picks} - {stats.total_picks - stats.correct_picks}</StatNumber>
+          <StatNumber>{stats.weeks_won} - {stats.weeks_lost}</StatNumber>
         </Stat>
         <Divider orientation="vertical" h="30px" />
         <Stat>
@@ -70,7 +78,6 @@ export default function TopBar() {
         <Stat>
           <CompactStats />
         </Stat>
-      </HStack>
-    </Box>
+    </MainContainer>
   );
 }
