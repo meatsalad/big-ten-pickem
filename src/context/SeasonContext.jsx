@@ -4,35 +4,41 @@ import { supabase } from '../supabaseClient';
 const SeasonContext = createContext();
 
 export const SeasonProvider = ({ children }) => {
-  const [availableSeasons, setAvailableSeasons] = useState([]);
-  // Default to the current year, but it will be updated once seasons are fetched.
-  const [selectedSeason, setSelectedSeason] = useState(new Date().getFullYear());
-  const [loading, setLoading] = useState(true);
+  // Default states to null to indicate they haven't been loaded yet.
+  const [availableSeasons, setAvailableSeasons] = useState(null);
+  const [selectedSeason, setSelectedSeason] = useState(null);
 
   useEffect(() => {
     const fetchSeasons = async () => {
-      setLoading(true);
       try {
         const { data, error } = await supabase
           .from('games')
           .select('season');
         
-        if (error) {
-          console.error("Error fetching seasons:", error);
-        } else if (data) {
+        if (error) throw error;
+
+        if (data) {
           const uniqueSeasons = [...new Set(data.map(g => g.season).filter(Boolean))];
-          const sortedSeasons = uniqueSeasons.sort((a, b) => b - a); // Sort descending
+          const sortedSeasons = uniqueSeasons.sort((a, b) => b - a);
           setAvailableSeasons(sortedSeasons);
           
-          // **BUG FIX:** If there are available seasons, default to the most recent one.
+          // If there are seasons in the DB, set the most recent one as selected.
           if (sortedSeasons.length > 0) {
             setSelectedSeason(sortedSeasons[0]);
+          } else {
+            // Otherwise, fallback to the current year.
+            setSelectedSeason(new Date().getFullYear());
           }
+        } else {
+            // If there's no data, set an empty array and the current year.
+            setAvailableSeasons([]);
+            setSelectedSeason(new Date().getFullYear());
         }
       } catch (error) {
         console.error("Error in fetchSeasons:", error);
-      } finally {
-        setLoading(false);
+        // On error, still set default values to allow the app to render.
+        setAvailableSeasons([]);
+        setSelectedSeason(new Date().getFullYear());
       }
     };
     fetchSeasons();
@@ -42,13 +48,12 @@ export const SeasonProvider = ({ children }) => {
     availableSeasons,
     selectedSeason,
     setSelectedSeason,
-    loading,
   };
 
+  // Only render the rest of the app if the seasons have been determined.
   return (
     <SeasonContext.Provider value={value}>
-      {/* Only render children when not loading */}
-      {!loading && children}
+      {availableSeasons !== null && children}
     </SeasonContext.Provider>
   );
 };

@@ -14,7 +14,7 @@
   [functions."update-live-scores"]
     schedule = "0 * * * 5,6,0" # Every hour on Fri, Sat, Sun
   
-  # The settle-most-recent-week function is triggered manually, so it has no schedule.
+  # The other functions are triggered manually, so they have no schedule.
 
 # --- Redirect Rule for Functions ---
 # This rule is crucial for the live site. It tells Netlify how to handle
