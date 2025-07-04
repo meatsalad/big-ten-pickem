@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from './context/AuthContext.jsx';
-import { Routes, Route, Link as RouterLink, Outlet, useLocation } from 'react-router-dom';
+import { Routes, Route, Link as RouterLink, Outlet, useLocation, Navigate } from 'react-router-dom';
 import Auth from './components/Auth.jsx';
 import GameList from './components/GameList.jsx';
 import Leaderboard from './components/Leaderboard.jsx';
@@ -8,6 +8,9 @@ import Stats from './components/Stats.jsx';
 import Rules from './components/Rules.jsx';
 import Account from './components/Account.jsx';
 import TopBar from './components/TopBar.jsx';
+import Profile from './components/Profile.jsx'; // <-- Was MyStats.jsx
+import Admin from './components/Admin.jsx';
+import OnlineUsers from './components/OnlineUsers.jsx';
 
 import {
   Box,
@@ -25,7 +28,7 @@ import {
   Tooltip,
 } from '@chakra-ui/react';
 
-// Import icons from the new library
+// Import icons
 import {
   FaTrophy,
   FaClipboardList,
@@ -34,6 +37,8 @@ import {
   FaSignOutAlt,
   FaAngleDoubleLeft,
   FaAngleDoubleRight,
+  FaIdBadge,
+  FaShieldAlt,
 } from 'react-icons/fa';
 
 // A reusable NavItem component for our sidebar links
@@ -93,7 +98,7 @@ function AppShell() {
               icon={isCollapsed ? <FaAngleDoubleRight /> : <FaAngleDoubleLeft />}
               onClick={() => setIsCollapsed(!isCollapsed)}
               aria-label="Toggle Sidebar"
-              bg="transparent"
+              variant="ghost"
               color="white"
               _hover={{ bg: 'whiteAlpha.200' }}
               isRound
@@ -104,12 +109,19 @@ function AppShell() {
           <VStack spacing={2} align="stretch" flex="1">
             <NavItem to="/" icon={FaTrophy} isCollapsed={isCollapsed}>Leaderboard</NavItem>
             <NavItem to="/picks" icon={FaClipboardList} isCollapsed={isCollapsed}>Picks</NavItem>
-            <NavItem to="/stats" icon={FaChartBar} isCollapsed={isCollapsed}>Stats</NavItem>
+            <NavItem to="/stats" icon={FaChartBar} isCollapsed={isCollapsed}>League Stats</NavItem>
+            {/* Link now points to the user's own profile page */}
+            <NavItem to={`/profile/${user.id}`} icon={FaIdBadge} isCollapsed={isCollapsed}>My Stats</NavItem>
             <NavItem to="/rules" icon={FaBook} isCollapsed={isCollapsed}>Rules</NavItem>
+            
+            {profile?.role === 'commissioner' && (
+              <NavItem to="/admin" icon={FaShieldAlt} isCollapsed={isCollapsed}>Admin</NavItem>
+            )}
           </VStack>
 
           {/* User Info & Logout at the bottom */}
           <VStack spacing={3} align="stretch">
+            {!isCollapsed && <OnlineUsers />}
             <Divider borderColor="whiteAlpha.400" />
             <Link
               as={RouterLink}
@@ -147,6 +159,16 @@ function AppShell() {
   );
 }
 
+// --- New Protected Route Component ---
+const CommissionerRoute = ({ children }) => {
+    const { profile } = useAuth();
+    if (profile?.role !== 'commissioner') {
+        return <Navigate to="/" replace />;
+    }
+    return children;
+};
+
+
 // The main App component that handles routing logic
 function App() {
   const { session } = useAuth();
@@ -158,8 +180,20 @@ function App() {
           <Route index element={<Leaderboard />} />
           <Route path="picks" element={<GameList />} />
           <Route path="stats" element={<Stats />} />
+          {/* Add the new dynamic routes */}
+          <Route path="profile/:userId" element={<Profile />} />
+          {/* Redirect from old path to new path */}
+          <Route path="my-stats" element={<Navigate to={`/profile/${session.user.id}`} replace />} />
           <Route path="rules" element={<Rules />} />
           <Route path="account" element={<Account />} />
+          <Route 
+            path="admin" 
+            element={
+              <CommissionerRoute>
+                <Admin />
+              </CommissionerRoute>
+            } 
+          />
         </Route>
       ) : (
         <Route path="*" element={<Auth />} />

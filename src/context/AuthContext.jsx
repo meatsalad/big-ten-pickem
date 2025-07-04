@@ -9,24 +9,14 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Function to fetch the user's profile data
-  const refreshProfile = async () => {
-    if (user) {
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('username, avatar_url, favorite_team')
-        .eq('id', user.id)
-        .single();
-      setProfile(profileData || null);
-    }
-  };
-
   useEffect(() => {
+    // 1. Initial check for the session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      setLoading(false);
+      setLoading(false); // <-- Crucially, set loading to false after the session is checked
 
+      // 2. Set up the listener for future auth changes
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         (_event, session) => {
           setSession(session);
@@ -34,22 +24,46 @@ export const AuthProvider = ({ children }) => {
         }
       );
 
+      // Cleanup the subscription when the component unmounts
       return () => {
         subscription?.unsubscribe();
       };
     });
   }, []);
 
+  // 3. A separate effect to fetch the profile whenever the user object changes
   useEffect(() => {
-    // Fetch profile whenever the user object changes
-    refreshProfile();
+    if (user) {
+      supabase
+        .from('profiles')
+        .select('username, avatar_url, favorite_team, role')
+        .eq('id', user.id)
+        .single()
+        .then(({ data }) => {
+          setProfile(data || null);
+        });
+    } else {
+      setProfile(null);
+    }
   }, [user]);
+
+  // This function is still useful for manual refreshes, like on the Account page
+  const refreshProfile = async () => {
+    if (user) {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('username, avatar_url, favorite_team, role')
+        .eq('id', user.id)
+        .single();
+      setProfile(profileData || null);
+    }
+  };
 
   const value = {
     session,
     user,
     profile,
-    refreshProfile, // <-- Expose the refresh function to the app
+    refreshProfile,
     signOut: () => supabase.auth.signOut(),
   };
 

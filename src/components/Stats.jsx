@@ -15,6 +15,8 @@ import {
   StatHelpText,
   VStack,
   Center,
+  Skeleton, // <-- Import Skeleton components
+  SkeletonText,
 } from '@chakra-ui/react';
 import { InfoIcon } from '@chakra-ui/icons';
 
@@ -41,6 +43,31 @@ const StatCard = ({ title, description, stat, helpText, icon }) => {
   );
 };
 
+// --- New Sub-component for the Skeleton Loading State ---
+const StatsPageSkeleton = () => {
+  return (
+    <Box>
+      <Heading size="lg" mb={6}>
+        Season Leaders
+      </Heading>
+      <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6}>
+        {/* Create an array of 4 items to map over for the skeleton cards */}
+        {[...Array(4)].map((_, i) => (
+          <Card key={i} variant="outline">
+            <CardHeader>
+              <Skeleton height="20px" width="70%" />
+              <Skeleton height="14px" width="100%" mt={2} />
+            </CardHeader>
+            <CardBody>
+              <SkeletonText mt="4" noOfLines={3} spacing="4" />
+            </CardBody>
+          </Card>
+        ))}
+      </SimpleGrid>
+    </Box>
+  );
+};
+
 export default function Stats() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -61,16 +88,12 @@ export default function Stats() {
     fetchStats();
   }, []);
 
+  // Use the new Skeleton component when loading
   if (loading) {
-    return (
-      <VStack>
-        <Spinner />
-        <Text>Calculating league stats...</Text>
-      </VStack>
-    );
+    return <StatsPageSkeleton />;
   }
 
-  // Check if any stats have been earned
+  // Check if any stats have been earned by seeing if any value in the stats object is not null
   const hasAnyStats = stats && Object.values(stats).some(value => value !== null);
 
   return (

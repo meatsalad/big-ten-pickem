@@ -36,8 +36,9 @@ import {
   AlertIcon,
   ButtonGroup,
   Divider,
+  Center,
 } from '@chakra-ui/react';
-import { ChevronLeftIcon, ChevronRightIcon, CheckIcon, CloseIcon } from '@chakra-ui/icons';
+import { ChevronLeftIcon, ChevronRightIcon, CheckIcon, CloseIcon, CalendarIcon } from '@chakra-ui/icons';
 
 // --- Helper Functions & Components ---
 
@@ -97,7 +98,7 @@ const Countdown = ({ lockTime }) => {
 // --- Main Component ---
 export default function GameList() {
   const { user } = useAuth();
-  const [selectedWeek, setSelectedWeek] = useState(1); // Start at Week 1 by default
+  const [selectedWeek, setSelectedWeek] = useState(getCurrentNCAAFWeek());
   const [weekData, setWeekData] = useState({ games: [], players: [], picks: [] });
   const [firstKickoff, setFirstKickoff] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -206,7 +207,7 @@ export default function GameList() {
           icon={<ChevronRightIcon />}
           onClick={() => setSelectedWeek(prev => prev + 1)}
           aria-label="Next Week"
-          isDisabled={selectedWeek >= 14} // <-- Corrected Logic
+          isDisabled={selectedWeek >= 14}
         />
       </Flex>
 
@@ -214,6 +215,13 @@ export default function GameList() {
 
       {loading ? (
         <Spinner />
+      ) : weekData.games.length === 0 ? (
+        // --- This is the new Empty State view ---
+        <Center p={10} borderWidth="1px" borderRadius="lg" bg="gray.50" flexDirection="column">
+            <CalendarIcon boxSize="50px" color="gray.400" />
+            <Heading size="md" mt={4}>No Games Scheduled</Heading>
+            <Text color="gray.600">The schedule for this week has not been released yet.</Text>
+        </Center>
       ) : (
         <Tabs isFitted variant="enclosed">
           <TabList>

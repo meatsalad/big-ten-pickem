@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { useSeason } from '../context/SeasonContext'; // <-- Import the new season hook
 import CompactStats from './CompactStats';
 import {
   Box,
@@ -15,15 +16,19 @@ import {
 
 export default function TopBar() {
   const { user } = useAuth();
+  const { selectedSeason } = useSeason(); // <-- Get the selected season from our context
   const [stats, setStats] = useState(null);
   const navStyles = useStyleConfig("Navbar");
 
   useEffect(() => {
-    if (!user) return;
+    // Don't fetch data if we don't have a user or a selected season yet
+    if (!user || !selectedSeason) return;
 
     const fetchSummaryStats = async () => {
+      // Pass the selected season to the database function
       const { data, error } = await supabase.rpc('get_user_summary_stats', {
         p_user_id: user.id,
+        p_season: selectedSeason,
       });
 
       if (error) {
@@ -34,7 +39,7 @@ export default function TopBar() {
     };
 
     fetchSummaryStats();
-  }, [user]);
+  }, [user, selectedSeason]); // <-- Re-run this function whenever the user or season changes
 
   // Main container uses Box for simpler centering
   const MainContainer = ({ children }) => (
@@ -76,7 +81,6 @@ export default function TopBar() {
         </Stat>
         <Divider orientation="vertical" h="30px" />
         <Stat>
-          {/* CompactStats already has responsive text, so we just need to adjust its label */}
           <StatLabel fontSize={{ base: 'xs', md: 'sm' }}>Season Net</StatLabel>
           <CompactStats />
         </Stat>
