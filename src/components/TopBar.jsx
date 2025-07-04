@@ -39,7 +39,7 @@ export default function TopBar() {
   // Main container uses Box for simpler centering
   const MainContainer = ({ children }) => (
     <Box as="header" p={2} __css={navStyles}>
-      <HStack spacing={8} mx="auto" width="fit-content">
+      <HStack spacing={{ base: 4, md: 8 }} mx="auto" width="fit-content">
         {children}
       </HStack>
     </Box>
@@ -61,21 +61,23 @@ export default function TopBar() {
   return (
     <MainContainer>
         <Stat>
-          <StatLabel>Rank</StatLabel>
-          <StatNumber>#{stats.rank}</StatNumber>
+          <StatLabel fontSize={{ base: 'xs', md: 'sm' }}>Rank</StatLabel>
+          <StatNumber fontSize={{ base: 'lg', md: 'xl' }}>#{stats.rank}</StatNumber>
         </Stat>
         <Divider orientation="vertical" h="30px" />
         <Stat>
-          <StatLabel>Record</StatLabel>
-          <StatNumber>{stats.weeks_won} - {stats.weeks_lost}</StatNumber>
+          <StatLabel fontSize={{ base: 'xs', md: 'sm' }}>Record</StatLabel>
+          <StatNumber fontSize={{ base: 'lg', md: 'xl' }}>{stats.weeks_won} - {stats.weeks_lost}</StatNumber>
         </Stat>
         <Divider orientation="vertical" h="30px" />
         <Stat>
-          <StatLabel>Win %</StatLabel>
-          <StatNumber>{winPercentage}%</StatNumber>
+          <StatLabel fontSize={{ base: 'xs', md: 'sm' }}>Win %</StatLabel>
+          <StatNumber fontSize={{ base: 'lg', md: 'xl' }}>{winPercentage}%</StatNumber>
         </Stat>
         <Divider orientation="vertical" h="30px" />
         <Stat>
+          {/* CompactStats already has responsive text, so we just need to adjust its label */}
+          <StatLabel fontSize={{ base: 'xs', md: 'sm' }}>Season Net</StatLabel>
           <CompactStats />
         </Stat>
     </MainContainer>
