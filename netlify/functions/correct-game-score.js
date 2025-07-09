@@ -1,68 +1,53 @@
-const { createClient } = require('@supabase/supabase-js');
+import { createClient } from '@supabase/supabase-js';
+import { authorizeCommissioner } from './lib/auth';
 
-exports.handler = async function(event, context) {
-  // This function can only be called via a POST request
+const { VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY } = process.env;
+
+export const handler = async (event) => {
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+    return {
+      statusCode: 405,
+      body: JSON.stringify({ message: 'Method Not Allowed' }),
+      headers: { 'Allow': 'POST' },
+    };
   }
 
-  const supabaseUrl = process.env.VITE_SUPABASE_URL;
-  // IMPORTANT: Use the SERVICE_ROLE_KEY to bypass RLS policies
-  const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const supabase = createClient(VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY);
 
   try {
-    const { game_id, home_score, away_score } = JSON.parse(event.body);
+    // 1. Authorize the user
+    await authorizeCommissioner(supabase, event);
 
-    if (!game_id || home_score === null || away_score === null) {
-      return { statusCode: 400, body: 'Missing game_id or scores' };
+    // 2. Proceed with business logic
+    const { gameId, homeTeamScore, awayTeamScore, winningTeam } = JSON.parse(event.body);
+
+    if (gameId === undefined || homeTeamScore === undefined || awayTeamScore === undefined || winningTeam === undefined) {
+      return { statusCode: 400, body: JSON.stringify({ message: 'Missing required game data.' }) };
     }
 
-    // 1. Determine the winning team based on the corrected scores
-    const { data: gameInfo } = await supabase
-        .from('games')
-        .select('home_team, away_team')
-        .eq('id', game_id)
-        .single();
-    
-    if (!gameInfo) throw new Error('Game not found.');
-
-    const winning_team = home_score > away_score ? gameInfo.home_team : gameInfo.away_team;
-    
-    // 2. Update the game with the new scores and winner
-    await supabase
+    const { data, error } = await supabase
       .from('games')
-      .update({ 
-          home_team_score: home_score,
-          away_team_score: away_score,
-          winning_team: winning_team
+      .update({
+        home_team_score: homeTeamScore,
+        away_team_score: awayTeamScore,
+        winning_team: winningTeam,
       })
-      .eq('id', game_id);
+      .eq('id', gameId);
 
-    // 3. Re-grade all picks for that game
-    const { data: picksToRegrade, error: picksError } = await supabase
-        .from('picks')
-        .select('id, selected_team')
-        .eq('game_id', game_id);
-
-    if (picksError) throw picksError;
-
-    const pickUpdates = picksToRegrade.map(pick => ({
-        id: pick.id,
-        is_correct: pick.selected_team === winning_team,
-    }));
-
-    if (pickUpdates.length > 0) {
-        await supabase.from('picks').upsert(pickUpdates);
+    if (error) {
+      throw error;
     }
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ message: 'Game score corrected and picks re-graded successfully!' }),
+      body: JSON.stringify({ message: 'Game score corrected successfully.', data }),
     };
 
   } catch (error) {
-    console.error('Error correcting game score:', error);
-    return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+    console.error('Error in correct-game-score:', error);
+    return {
+      statusCode: error.statusCode || 500,
+      body: JSON.stringify({ message: error.message || 'Internal Server Error' }),
+    };
   }
 };

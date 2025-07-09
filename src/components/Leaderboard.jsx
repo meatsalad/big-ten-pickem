@@ -1,140 +1,111 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '../supabaseClient';
-import { useAuth } from '../context/AuthContext';
-import { useSeason } from '../context/SeasonContext'; // <-- Import the new season hook
-import SeasonSelector from './SeasonSelector'; // <-- Import the new component
-import { Link as RouterLink } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabaseClient';
+import { useSeason } from '../context/SeasonContext';
 import {
   Box,
   Heading,
-  Text,
-  Badge,
-  Button,
-  useToast,
-  Spinner,
-  HStack,
-  Flex,
-  Accordion,
-  AccordionItem,
-  AccordionButton,
-  AccordionPanel,
-  AccordionIcon,
-  SimpleGrid,
-  Avatar,
   Table,
   Thead,
   Tbody,
   Tr,
   Th,
   Td,
-  TableContainer,
-  AlertDialog,
-  AlertDialogBody,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogContent,
-  AlertDialogOverlay,
-  useDisclosure,
+  Spinner,
+  Alert,
+  AlertIcon,
   Center,
-  VStack,
-  Link,
+  Text,
 } from '@chakra-ui/react';
-import { StarIcon, InfoIcon } from '@chakra-ui/icons';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
 
-// --- Sub-components (StatsChart, TotalsTable) remain the same ---
-
-// --- Main Leaderboard Component ---
-export default function Leaderboard() {
-  const { user } = useAuth();
-  const { selectedSeason } = useSeason(); // <-- Get the selected season
-  const toast = useToast();
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  const cancelRef = useRef();
-
+const Leaderboard = () => {
+  const { selectedSeason } = useSeason();
   const [leaderboardData, setLeaderboardData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isSettling, setIsSettling] = useState(false);
-  const totalWeeks = 14;
+  const [error, setError] = useState(null);
 
-  const fetchData = async () => {
-    setLoading(true);
-    const [profilesRes, weeklyResultsRes] = await Promise.all([
-      supabase.from('profiles').select('id, username, avatar_url'),
-      // Filter weekly results by the selected season
-      supabase.from('weekly_results').select('*').eq('season', selectedSeason)
-    ]);
+  useEffect(() => {
+    if (!selectedSeason) return;
 
-    if (profilesRes.error || weeklyResultsRes.error) {
-      console.error('Error fetching data:', profilesRes.error || weeklyResultsRes.error);
-      setLoading(false);
-      return;
+    const fetchLeaderboard = async () => {
+      setLoading(true);
+      setError(null);
+      setLeaderboardData([]);
+
+      try {
+        const { data, error: rpcError } = await supabase.rpc('get_leaderboard', {
+          p_season: selectedSeason,
+        });
+
+        if (rpcError) {
+          throw rpcError;
+        }
+        
+        setLeaderboardData(data);
+      } catch (err) {
+        console.error('Error fetching leaderboard data:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLeaderboard();
+  }, [selectedSeason]); // Re-fetch when season changes
+
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <Center p={10}>
+          <Spinner size="xl" />
+        </Center>
+      );
     }
 
-    const profiles = profilesRes.data || [];
-    const weeklyResults = weeklyResultsRes.data || [];
-    const playerCount = profiles.length;
+    if (error) {
+      return (
+        <Alert status="error" borderRadius="md">
+          <AlertIcon />
+          There was an error fetching the leaderboard: {error}
+        </Alert>
+      );
+    }
+    
+    if (leaderboardData.length === 0) {
+      return <Text>No leaderboard data available for the {selectedSeason} season yet.</Text>
+    }
 
-    const processedData = profiles.map((profile) => {
-      const userWeeklyResults = weeklyResults.filter(r => r.user_id === profile.id);
-
-      const totalWins = userWeeklyResults.filter(r => r.is_winner).length;
-      const totalPoopstars = userWeeklyResults.filter(r => r.is_poopstar).length;
-      const totalPerfectPicks = userWeeklyResults.filter(r => r.is_perfect).length;
-      
-      let totalWinnings = 0;
-      let totalPaid = 0;
-
-      for (let week = 1; week <= totalWeeks; week++) {
-          const weekResult = userWeeklyResults.find(r => r.week === week);
-          if (!weekResult) continue;
-
-          const potSize = weeklyResults.some(r => r.week === week && r.is_perfect) ? 20 : 10;
-          const losersCount = playerCount - weeklyResults.filter(r => r.week === week && r.is_winner).length;
-          
-          if (weekResult.is_winner) {
-              totalWinnings += potSize * losersCount;
-          } else {
-              totalPaid += potSize;
-          }
-      }
-
-      const weekly = userWeeklyResults.reduce((acc, result) => {
-        acc[result.week] = result;
-        return acc;
-      }, {});
-
-      return { ...profile, totalWins, totalPoopstars, totalPerfectPicks, weekly, totalWinnings, totalPaid };
-    });
-
-    processedData.sort((a, b) => b.totalWins - a.totalWins);
-    setLeaderboardData(processedData);
-    setLoading(false);
+    return (
+      <Table variant="simple">
+        <Thead>
+          <Tr>
+            <Th isNumeric>Rank</Th>
+            <Th>Player</Th>
+            <Th isNumeric>Weeks Won</Th>
+            <Th isNumeric>Weeks Lost</Th>
+          </Tr>
+        </Thead>
+        <Tbody>
+          {leaderboardData.map((player) => (
+            <Tr key={player.username}>
+              <Td isNumeric>{player.rank}</Td>
+              <Td>{player.username}</Td>
+              <Td isNumeric>{player.wins}</Td>
+              <Td isNumeric>{player.losses}</Td>
+            </Tr>
+          ))}
+        </Tbody>
+      </Table>
+    );
   };
 
-  // Refetch data whenever the selectedSeason changes
-  useEffect(() => {
-    fetchData();
-  }, [selectedSeason]);
-
-  // ... (handleSettleWeek, handlePaidUp, renderWeekStatus functions remain the same) ...
-
-  if (loading) {
-    return <Spinner />; // We can add a skeleton here later
-  }
-
   return (
-    <Box w="100%">
-      <Flex justify="space-between" align="center" mb={2}>
-        <Heading size="lg">Leaderboard</Heading>
-        <Button colorScheme="teal" onClick={onOpen} isLoading={isSettling}>
-          Settle Most Recent Week
-        </Button>
-      </Flex>
-      
-      <SeasonSelector /> {/* <-- Add the new component here */}
-
-      {/* ... (Rest of the component remains the same) ... */}
+    <Box>
+      <Heading as="h1" mb={6}>
+        Leaderboard: {selectedSeason} Season
+      </Heading>
+      {renderContent()}
     </Box>
   );
-}
+};
+
+export default Leaderboard;

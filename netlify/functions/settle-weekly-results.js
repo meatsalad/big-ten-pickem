@@ -8,7 +8,7 @@ const getPreviousNCAAFWeek = () => {
   return week > 1 ? week - 1 : 1;
 };
 
-exports.handler = async function(event) {
+export const handler = async (event) => {
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
   const supabase = createClient(supabaseUrl, supabaseKey);

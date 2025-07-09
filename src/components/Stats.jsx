@@ -1,209 +1,143 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../lib/supabaseClient';
+import { useSeason } from '../context/SeasonContext';
 import {
   Box,
   Heading,
   SimpleGrid,
-  Card,
-  CardHeader,
-  CardBody,
-  Text,
   Spinner,
-  Stat,
-  StatLabel,
-  StatNumber,
-  StatHelpText,
+  Alert,
+  AlertIcon,
+  Text,
   VStack,
-  Center,
-  Skeleton, // <-- Import Skeleton components
-  SkeletonText,
+  useColorModeValue,
 } from '@chakra-ui/react';
-import { InfoIcon } from '@chakra-ui/icons';
+// --- CORRECTED IMPORTS START ---
+import { FaTrophy, FaPoop, FaHeart } from 'react-icons/fa';
+import { GiCrystalBall } from 'react-icons/gi'; // Use GiCrystalBall from Game Icons
+// --- CORRECTED IMPORTS END ---
 
-// A reusable StatCard component for our page
-const StatCard = ({ title, description, stat, helpText, icon }) => {
+// A presentational component for displaying a single stat.
+const StatCard = ({ title, user, value, icon }) => {
+  const bgColor = useColorModeValue('gray.100', 'gray.700');
   return (
-    <Card variant="outline" h="100%">
-      <CardHeader>
-        <Heading size="md">{title}</Heading>
-        <Text fontSize="sm" color="gray.500" mt={1}>{description}</Text>
-      </CardHeader>
-      <CardBody>
-        <Stat>
-          <StatLabel fontSize="xl">{stat?.username || 'N/A'}</StatLabel>
-          <StatNumber fontSize="4xl">
-            {icon} {stat?.value?.toFixed(1) || '0'}{helpText}
-          </StatNumber>
-          <StatHelpText>
-            {stat ? `Based on available data.` : 'Not enough data to calculate.'}
-          </StatHelpText>
-        </Stat>
-      </CardBody>
-    </Card>
+    <VStack
+      p={5}
+      bg={bgColor}
+      borderRadius="lg"
+      boxShadow="md"
+      align="flex-start"
+      spacing={1}
+    >
+      <Box color="gray.500" fontSize="2xl">
+        {icon}
+      </Box>
+      <Text fontSize="md" color="gray.500">
+        {title}
+      </Text>
+      <Text fontSize="2xl" fontWeight="bold">
+        {user}
+      </Text>
+      <Text fontSize="lg">{value}</Text>
+    </VStack>
   );
 };
 
-// --- New Sub-component for the Skeleton Loading State ---
-const StatsPageSkeleton = () => {
-  return (
-    <Box>
-      <Heading size="lg" mb={6}>
-        Season Leaders
-      </Heading>
-      <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6}>
-        {/* Create an array of 4 items to map over for the skeleton cards */}
-        {[...Array(4)].map((_, i) => (
-          <Card key={i} variant="outline">
-            <CardHeader>
-              <Skeleton height="20px" width="70%" />
-              <Skeleton height="14px" width="100%" mt={2} />
-            </CardHeader>
-            <CardBody>
-              <SkeletonText mt="4" noOfLines={3} spacing="4" />
-            </CardBody>
-          </Card>
-        ))}
-      </SimpleGrid>
-    </Box>
-  );
-};
 
-export default function Stats() {
+const Stats = () => {
+  const { selectedSeason } = useSeason();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Map stat keys to titles and icons for display
+  const statDisplayMap = {
+    // --- CORRECTED ICON USAGE START ---
+    oracle: { title: 'The Oracle', icon: <GiCrystalBall /> },
+    // --- CORRECTED ICON USAGE END ---
+    consistent: { title: 'Mr. Consistent', icon: <FaTrophy /> },
+    pooper_star: { title: 'Poopstar', icon: <FaPoop /> },
+    homer: { title: 'The Homer', icon: <FaHeart /> },
+    // Add other stats here...
+  };
+
 
   useEffect(() => {
+    if (!selectedSeason) return;
+
     const fetchStats = async () => {
       setLoading(true);
-      const { data, error } = await supabase.rpc('get_league_stats');
+      setError(null);
+      setStats(null);
 
-      if (error) {
-        console.error('Error fetching league stats:', error);
-      } else {
+       try {
+        const response = await fetch(`/.netlify/functions/get-league-stats?season=${selectedSeason}`);
+        
+        if (!response.ok) {
+          const errorBody = await response.json();
+          throw new Error(errorBody.message || `Request failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
         setStats(data);
+      } catch (err) {
+        console.error('Error fetching league stats:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     fetchStats();
-  }, []);
+  }, [selectedSeason]);
 
-  // Use the new Skeleton component when loading
-  if (loading) {
-    return <StatsPageSkeleton />;
-  }
+  const renderContent = () => {
+    if (loading) {
+      return <Spinner size="xl" />;
+    }
 
-  // Check if any stats have been earned by seeing if any value in the stats object is not null
-  const hasAnyStats = stats && Object.values(stats).some(value => value !== null);
+    if (error) {
+      return (
+        <Alert status="error" borderRadius="md">
+          <AlertIcon />
+          There was an error fetching league stats: {error}
+        </Alert>
+      );
+    }
+    
+    if (!stats || Object.values(stats).every(val => val === null)) {
+        return <Text>No stats available for the {selectedSeason} season yet.</Text>
+    }
+
+    return (
+      <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
+        {Object.entries(stats)
+          .filter(([key, value]) => value && statDisplayMap[key])
+          .map(([key, value]) => (
+            <StatCard
+              key={key}
+              title={statDisplayMap[key].title}
+              icon={statDisplayMap[key].icon}
+              user={value.username}
+              value={`${
+                key === 'consistent' 
+                ? parseFloat(value.value).toFixed(2) + '%' 
+                : value.value
+              }`}
+            />
+          ))}
+      </SimpleGrid>
+    );
+  };
 
   return (
     <Box>
-      <Heading size="lg" mb={6}>
-        Season Leaders
+      <Heading as="h1" mb={6}>
+        League Stats: {selectedSeason} Season
       </Heading>
-      
-      {hasAnyStats ? (
-        <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6}>
-          {stats?.oracle && (
-            <StatCard
-              title="The Oracle"
-              description="Most total correct picks for the season."
-              stat={stats.oracle}
-              icon="🔮"
-              helpText=" Correct Picks"
-            />
-          )}
-          {stats?.consistent && (
-            <StatCard
-              title="Mr. Consistent"
-              description="Highest overall pick accuracy."
-              stat={stats.consistent}
-              icon="🎯"
-              helpText="%"
-            />
-          )}
-          {stats?.pooper_star && (
-            <StatCard
-              title="The Pooper Star"
-              description="Most weeks with the lowest score."
-              stat={stats.pooper_star}
-              icon="💩"
-              helpText=" Poopstars"
-            />
-          )}
-          {stats?.perfectionist && (
-            <StatCard
-              title="Perfectionist"
-              description="Most weeks with a perfect score."
-              stat={stats.perfectionist}
-              icon="⭐"
-              helpText=" Perfect Weeks"
-            />
-          )}
-          {stats?.homer && (
-            <StatCard
-              title="The Homer"
-              description="Most picks for their favorite team."
-              stat={stats.homer}
-              icon="🏠"
-              helpText=" Picks"
-            />
-          )}
-          {stats?.biggest_blowout && (
-            <StatCard
-              title="Biggest Blowout Call"
-              description="Correctly picked the game with the largest point differential."
-              stat={stats.biggest_blowout}
-              icon="💣"
-              helpText=" Point Win"
-            />
-          )}
-          {stats?.price_is_right && (
-            <StatCard
-              title="The Price is Right"
-              description="Lowest average tiebreaker differential (min. 4 weeks)."
-              stat={stats.price_is_right}
-              icon="💰"
-              helpText=" Avg Diff"
-            />
-          )}
-          {stats?.road_warrior && (
-            <StatCard
-              title="Road Warrior"
-              description="Most correct picks for away teams."
-              stat={stats.road_warrior}
-              icon="🚌"
-              helpText=" Road Wins"
-            />
-          )}
-          {stats?.rivalry_king && (
-            <StatCard
-              title="Rivalry King"
-              description="Most correct picks in rivalry games."
-              stat={stats.rivalry_king}
-              icon="👑"
-              helpText=" Rivalry Wins"
-            />
-          )}
-          {stats?.front_runner && (
-            <StatCard
-              title="Frontrunner"
-              description="Most correct picks for home teams."
-              stat={stats.front_runner}
-              icon="🏟️"
-              helpText=" Home Wins"
-            />
-          )}
-        </SimpleGrid>
-      ) : (
-        <Center p={10} borderWidth="1px" borderRadius="lg" bg="gray.50">
-          <VStack>
-            <InfoIcon boxSize="50px" color="blue.500" />
-            <Heading size="md" mt={4}>No Awards Yet!</Heading>
-            <Text>Stats and awards will appear here as the season progresses.</Text>
-          </VStack>
-        </Center>
-      )}
+      {renderContent()}
     </Box>
   );
-}
+};
+
+export default Stats;

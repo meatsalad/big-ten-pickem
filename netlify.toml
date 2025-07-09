@@ -1,5 +1,3 @@
-# This file configures the build and deployment settings for Netlify.
-
 [build]
   command = "npm run build"
   publish = "dist"
@@ -7,19 +5,8 @@
 [functions]
   directory = "netlify/functions"
 
-  # --- Function Schedules ---
   [functions."fetch-weekly-games"]
-    schedule = "59 23 * * 1" # Monday at 11:59 PM
+    schedule = "59 23 * * 1"
 
   [functions."update-live-scores"]
-    schedule = "0 * * * 5,6,0" # Every hour on Fri, Sat, Sun
-  
-  # The other functions are triggered manually, so they have no schedule.
-
-# --- Redirect Rule for Functions ---
-# This rule is crucial for the live site. It tells Netlify how to handle
-# requests from the frontend to the backend serverless functions.
-[[redirects]]
-  from = "/.netlify/functions/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
+    schedule = "0 * * * 5,6,0"

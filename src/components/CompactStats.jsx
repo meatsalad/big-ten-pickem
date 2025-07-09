@@ -1,24 +1,29 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { useSeason } from '../context/SeasonContext'; // <-- Import the season hook
 import {
   HStack,
   Text,
-  Stat, // <-- Import Stat
+  Stat,
   StatArrow,
   Spinner,
 } from '@chakra-ui/react';
 
 export default function CompactStats() {
   const { user } = useAuth();
+  const { selectedSeason } = useSeason(); // <-- Get the selected season
   const [stats, setStats] = useState(null);
 
   useEffect(() => {
-    if (!user) return;
+    // Don't run if we don't have a user or a season yet
+    if (!user || !selectedSeason) return;
 
     const fetchFinancials = async () => {
+      setStats(null); // Reset stats when fetching for a new season
       const { data, error } = await supabase.rpc('get_user_financials', {
         p_user_id: user.id,
+        p_season: selectedSeason, // <-- Pass the selected season to the function
       });
 
       if (error) {
@@ -29,7 +34,7 @@ export default function CompactStats() {
     };
 
     fetchFinancials();
-  }, [user]);
+  }, [user, selectedSeason]); // <-- Re-run when the season changes
 
   if (!stats) {
     return <Spinner size="xs" color="white" />;
@@ -40,19 +45,14 @@ export default function CompactStats() {
   const net_color = net >= 0 ? 'green.400' : 'red.400';
 
   return (
-    <HStack>
-      {/* Wrap the net total in a <Stat> component */}
-      <Stat>
-        <HStack>
-          <Text fontSize="sm" color="gray.300">
-            Season Net:
-          </Text>
-          <Text fontWeight="bold" color={net_color}>
-            <StatArrow type={net_type} />
-            ${net}
-          </Text>
-        </HStack>
-      </Stat>
-    </HStack>
+    <Stat>
+      <HStack>
+        <Text fontSize={{ base: 'xs', md: 'sm' }}>Season Net:</Text>
+        <Text fontWeight="bold" color={net_color} fontSize={{ base: 'md', md: 'lg' }}>
+          <StatArrow type={net_type} />
+          ${net}
+        </Text>
+      </HStack>
+    </Stat>
   );
 }

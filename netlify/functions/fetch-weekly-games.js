@@ -10,7 +10,7 @@ const getCurrentNCAAFWeek = () => {
   return week > 0 ? week : 1; // Ensure week is at least 1
 };
 
-exports.handler = async function(event, context) {
+export const handler = async (event) => {
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
   const cfbdApiKey = process.env.CFBD_API_KEY;

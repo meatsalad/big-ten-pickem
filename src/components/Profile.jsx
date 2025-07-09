@@ -1,139 +1,168 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Navigate } from 'react-router-dom'; // Import useParams
-import { supabase } from '../supabaseClient';
+import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { useSeason } from '../context/SeasonContext';
 import {
   Box,
   Heading,
-  Spinner,
   VStack,
-  Text,
-  SimpleGrid,
-  Card,
-  CardHeader,
-  CardBody,
-  Avatar,
   HStack,
+  Text,
+  Spinner,
+  Alert,
+  AlertIcon,
+  SimpleGrid,
+  Stat,
+  StatLabel,
+  StatNumber,
+  StatGroup,
+  Divider,
 } from '@chakra-ui/react';
 import {
   LineChart,
   Line,
   XAxis,
   YAxis,
+  CartesianGrid,
   Tooltip,
   Legend,
   ResponsiveContainer,
-  CartesianGrid,
-  PieChart,
-  Pie,
-  Cell,
 } from 'recharts';
 
-// --- Sub-component for the Performance Line Chart ---
-const MyPerformanceChart = ({ data }) => {
-  if (!data || data.length === 0) {
-    return <Text>No weekly performance data yet.</Text>;
-  }
-  const fullData = [];
-  for (let i = 1; i <= 14; i++) {
-    const weekData = data.find(d => d.week === i);
-    fullData.push({ week: `Wk ${i}`, wins: weekData ? weekData.wins : 0 });
-  }
-  return (
-    <Card variant="outline" h="100%">
-      <CardHeader><Heading size="md">Weekly Performance</Heading></CardHeader>
-      <CardBody>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={fullData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="week" />
-            <YAxis allowDecimals={false} />
-            <Tooltip />
-            <Legend />
-            <Line type="monotone" dataKey="wins" name="Correct Picks" stroke="#8884d8" strokeWidth={2} activeDot={{ r: 8 }} />
-          </LineChart>
-        </ResponsiveContainer>
-      </CardBody>
-    </Card>
-  );
-};
+const Profile = () => {
+  const { user } = useAuth();
+  const { selectedSeason } = useSeason();
 
-// --- Sub-component for the Picking Tendencies Pie Chart ---
-const TendenciesPieChart = ({ data }) => {
-  if (!data || (data.home_picks === 0 && data.away_picks === 0)) {
-    return <Text>No picking tendency data yet.</Text>;
-  }
-  const chartData = [
-    { name: 'Home Picks', value: data.home_picks },
-    { name: 'Away Picks', value: data.away_picks },
-  ];
-  const COLORS = ['#0088FE', '#00C49F'];
-  return (
-    <Card variant="outline" h="100%">
-      <CardHeader><Heading size="md">Picking Tendencies</Heading></CardHeader>
-      <CardBody>
-        <ResponsiveContainer width="100%" height={300}>
-          <PieChart>
-            <Pie data={chartData} cx="50%" cy="50%" labelLine={false} outerRadius={80} fill="#8884d8" dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-              {chartData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
-            </Pie>
-            <Tooltip />
-            <Legend />
-          </PieChart>
-        </ResponsiveContainer>
-      </CardBody>
-    </Card>
-  );
-};
+  // State for each data source
+  const [summaryStats, setSummaryStats] = useState(null);
+  const [financials, setFinancials] = useState(null);
+  const [myStats, setMyStats] = useState(null);
 
-// --- Main Profile Component ---
-export default function Profile() {
-  const { userId } = useParams(); // Get userId from URL if it exists
-  const { user: loggedInUser } = useAuth();
-  const targetUserId = userId || loggedInUser.id; // Determine which user's stats to show
-
-  const [profile, setProfile] = useState(null);
-  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!targetUserId) return;
+    // Do not run if we don't have the required context
+    if (!user || !selectedSeason) {
+      setLoading(false);
+      return;
+    }
 
     const fetchProfileData = async () => {
       setLoading(true);
-      const { data: profileData } = await supabase.from('profiles').select('username, avatar_url').eq('id', targetUserId).single();
-      setProfile(profileData);
+      setError(null);
 
-      const { data: statsData, error } = await supabase.rpc('get_my_stats', { p_user_id: targetUserId });
-      if (error) {
-        console.error('Error fetching stats:', error);
-      } else {
-        setStats(statsData);
+      try {
+        // Fetch all user-specific data concurrently for efficiency
+        const [summaryRes, financialsRes, myStatsRes] = await Promise.all([
+          supabase.rpc('get_user_summary_stats', {
+            p_season: selectedSeason,
+            p_user_id: user.id,
+          }),
+          supabase.rpc('get_user_financials', {
+            p_season: selectedSeason,
+            p_user_id: user.id,
+          }),
+          supabase.rpc('get_my_stats', {
+            p_season: selectedSeason,
+            p_user_id: user.id,
+          }),
+        ]);
+
+        if (summaryRes.error) throw summaryRes.error;
+        if (financialsRes.error) throw financialsRes.error;
+        if (myStatsRes.error) throw myStatsRes.error;
+
+        // The RPC functions return an array, so we take the first element
+        setSummaryStats(summaryRes.data?.[0] || null);
+        setFinancials(financialsRes.data?.[0] || null);
+        setMyStats(myStatsRes.data || null);
+
+      } catch (err) {
+        console.error('Error fetching profile data:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     fetchProfileData();
-  }, [targetUserId]);
+  }, [user, selectedSeason]); // Re-fetch if user or season changes
 
   if (loading) {
-    return <VStack><Spinner /><Text>Loading Profile...</Text></VStack>;
+    return <Spinner size="xl" />;
   }
 
-  if (!profile) {
-    return <Heading>Profile not found.</Heading>;
+  if (error) {
+    return (
+      <Alert status="error" borderRadius="md">
+        <AlertIcon />
+        There was an error fetching your profile data: {error}
+      </Alert>
+    );
   }
 
   return (
     <Box>
-      <HStack spacing={4} mb={6}>
-        <Avatar size="lg" name={profile.username} src={profile.avatar_url} />
-        <Heading size="lg">{profile.username}'s Stats</Heading>
-      </HStack>
-      <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
-        <MyPerformanceChart data={stats?.performance_over_time} />
-        <TendenciesPieChart data={stats?.picking_tendencies} />
-      </SimpleGrid>
+      <Heading as="h1" mb={6}>
+        My Profile: {selectedSeason} Season
+      </Heading>
+
+      <VStack spacing={8} align="stretch">
+        {/* Season Summary Stats */}
+        <StatGroup>
+          <Stat>
+            <StatLabel>Rank</StatLabel>
+            <StatNumber>#{summaryStats?.rank || 'N/A'}</StatNumber>
+          </Stat>
+          <Stat>
+            <StatLabel>Weeks Won</StatLabel>
+            <StatNumber>{summaryStats?.weeks_won ?? '0'}</StatNumber>
+          </Stat>
+          <Stat>
+            <StatLabel>Weeks Lost</StatLabel>
+            <StatNumber>{summaryStats?.weeks_lost ?? '0'}</StatNumber>
+          </Stat>
+        </StatGroup>
+
+        <Divider />
+
+        {/* Financials */}
+        <Box>
+          <Heading as="h2" size="lg" mb={4}>Financials</Heading>
+          <HStack spacing={8}>
+            <Text fontSize="lg">
+              Total Winnings: <strong>${financials?.total_winnings?.toFixed(2) || '0.00'}</strong>
+            </Text>
+            <Text fontSize="lg">
+              Total Losses: <strong>${financials?.total_losses?.toFixed(2) || '0.00'}</strong>
+            </Text>
+          </HStack>
+        </Box>
+
+        <Divider />
+
+        {/* Performance Chart */}
+        <Box>
+          <Heading as="h2" size="lg" mb={4}>Performance Over Time</Heading>
+          {myStats?.performance_over_time?.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={myStats.performance_over_time}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="week" label={{ value: 'Week', position: 'insideBottom', offset: -5 }}/>
+                <YAxis allowDecimals={false} label={{ value: 'Correct Picks', angle: -90, position: 'insideLeft' }} />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="wins" stroke="#8884d8" activeDot={{ r: 8 }} name="Correct Picks" />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <Text>No performance data available for this season yet.</Text>
+          )}
+        </Box>
+      </VStack>
     </Box>
   );
-}
+};
+
+export default Profile;
