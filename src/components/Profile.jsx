@@ -11,7 +11,6 @@ import {
   Spinner,
   Alert,
   AlertIcon,
-  SimpleGrid,
   Stat,
   StatLabel,
   StatNumber,
@@ -42,7 +41,6 @@ const Profile = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Do not run if we don't have the required context
     if (!user || !selectedSeason) {
       setLoading(false);
       return;
@@ -53,8 +51,8 @@ const Profile = () => {
       setError(null);
 
       try {
-        // Fetch all user-specific data concurrently for efficiency
-        const [summaryRes, financialsRes, myStatsRes] = await Promise.all([
+        // --- THIS BLOCK IS UPDATED ---
+        const [summaryRes, financialsRes, myStatsResponse] = await Promise.all([
           supabase.rpc('get_user_summary_stats', {
             p_season: selectedSeason,
             p_user_id: user.id,
@@ -63,20 +61,21 @@ const Profile = () => {
             p_season: selectedSeason,
             p_user_id: user.id,
           }),
-          supabase.rpc('get_my_stats', {
-            p_season: selectedSeason,
-            p_user_id: user.id,
-          }),
+          // This now calls our new serverless function
+          fetch(`/.netlify/functions/get-my-stats?season=${selectedSeason}&user_id=${user.id}`),
         ]);
 
         if (summaryRes.error) throw summaryRes.error;
         if (financialsRes.error) throw financialsRes.error;
-        if (myStatsRes.error) throw myStatsRes.error;
+        if (!myStatsResponse.ok) {
+          const errorBody = await myStatsResponse.json();
+          throw new Error(errorBody.message);
+        }
 
-        // The RPC functions return an array, so we take the first element
         setSummaryStats(summaryRes.data?.[0] || null);
         setFinancials(financialsRes.data?.[0] || null);
-        setMyStats(myStatsRes.data || null);
+        setMyStats(await myStatsResponse.json());
+        // --- END OF UPDATED BLOCK ---
 
       } catch (err) {
         console.error('Error fetching profile data:', err);
@@ -87,7 +86,7 @@ const Profile = () => {
     };
 
     fetchProfileData();
-  }, [user, selectedSeason]); // Re-fetch if user or season changes
+  }, [user, selectedSeason]);
 
   if (loading) {
     return <Spinner size="xl" />;
@@ -109,7 +108,6 @@ const Profile = () => {
       </Heading>
 
       <VStack spacing={8} align="stretch">
-        {/* Season Summary Stats */}
         <StatGroup>
           <Stat>
             <StatLabel>Rank</StatLabel>
@@ -127,7 +125,6 @@ const Profile = () => {
 
         <Divider />
 
-        {/* Financials */}
         <Box>
           <Heading as="h2" size="lg" mb={4}>Financials</Heading>
           <HStack spacing={8}>
@@ -141,8 +138,17 @@ const Profile = () => {
         </Box>
 
         <Divider />
+        
+        <Box>
+            <Heading as="h2" size="lg" mb={4}>Picking Tendencies</Heading>
+            <HStack spacing={8}>
+                <Text fontSize="lg">Home Picks: <strong>{myStats?.picking_tendencies?.home_picks ?? 0}</strong></Text>
+                <Text fontSize="lg">Away Picks: <strong>{myStats?.picking_tendencies?.away_picks ?? 0}</strong></Text>
+            </HStack>
+        </Box>
+        
+        <Divider />
 
-        {/* Performance Chart */}
         <Box>
           <Heading as="h2" size="lg" mb={4}>Performance Over Time</Heading>
           {myStats?.performance_over_time?.length > 0 ? (

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 
 // Note: 'node-fetch' is no longer needed. Modern Node.js runtimes,

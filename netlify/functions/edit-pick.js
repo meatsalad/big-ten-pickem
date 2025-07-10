@@ -1,5 +1,6 @@
 // netlify/functions/edit-pick.js
 
+import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 import { authorizeCommissioner } from './lib/auth'; // Adjust path if needed
 

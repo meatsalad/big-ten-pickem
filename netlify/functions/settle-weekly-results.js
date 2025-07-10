@@ -1,3 +1,4 @@
+import 'dotenv/config';
 const { createClient } = require('@supabase/supabase-js');
 
 // Helper function to get the PREVIOUS college football week
