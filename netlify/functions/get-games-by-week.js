@@ -1,15 +1,16 @@
 import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 
-const { SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
-
 export const handler = async (event) => {
   const { week, season } = event.queryStringParameters;
   if (!week || !season) {
     return { statusCode: 400, body: JSON.stringify({ message: 'Week and season are required.' }) };
   }
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // Use the service key to bypass Row Level Security
+  const { SUPABASE_URL, SUPABASE_SERVICE_KEY } = process.env;
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+  
   const { data, error } = await supabase
     .from('games')
     .select('*')

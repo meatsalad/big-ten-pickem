@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
-import { useSeason } from '../context/SeasonContext'; // <-- Import the new season hook
+import { useSeason } from '../context/SeasonContext';
 import CompactStats from './CompactStats';
 import {
   Box,
@@ -16,32 +15,44 @@ import {
 
 export default function TopBar() {
   const { user } = useAuth();
-  const { selectedSeason } = useSeason(); // <-- Get the selected season from our context
+  const { selectedSeason } = useSeason();
   const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const navStyles = useStyleConfig("Navbar");
 
   useEffect(() => {
-    // Don't fetch data if we don't have a user or a selected season yet
-    if (!user || !selectedSeason) return;
+    if (!user || !selectedSeason) {
+      setLoading(false);
+      return;
+    }
 
     const fetchSummaryStats = async () => {
-      // Pass the selected season to the database function
-      const { data, error } = await supabase.rpc('get_user_summary_stats', {
-        p_user_id: user.id,
-        p_season: selectedSeason,
-      });
+      setLoading(true);
+      setError(null);
+      setStats(null);
 
-      if (error) {
-        console.error('Error fetching summary stats:', error);
-      } else if (data && data.length > 0) {
-        setStats(data[0]);
+      try {
+        const response = await fetch(`/.netlify/functions/get-user-summary-stats?season=${selectedSeason}&user_id=${user.id}`);
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to fetch summary stats');
+        }
+
+        const data = await response.json();
+        setStats(data);
+      } catch (err) {
+        console.error('Error fetching top bar summary stats:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchSummaryStats();
-  }, [user, selectedSeason]); // <-- Re-run this function whenever the user or season changes
+  }, [user, selectedSeason]);
 
-  // Main container uses Box for simpler centering
   const MainContainer = ({ children }) => (
     <Box as="header" p={2} __css={navStyles}>
       <HStack spacing={{ base: 4, md: 8 }} mx="auto" width="fit-content">
@@ -49,13 +60,18 @@ export default function TopBar() {
       </HStack>
     </Box>
   );
-
-  if (!stats) {
+  
+  // If loading, show a spinner. If there's an error, show nothing.
+  if (loading) {
     return (
       <MainContainer>
         <Spinner size="sm" />
       </MainContainer>
     );
+  }
+  
+  if (error || !stats) {
+      return null; // Don't render the bar if there's an error or no stats
   }
 
   const totalWeeksPlayed = (stats.weeks_won || 0) + (stats.weeks_lost || 0);
@@ -67,7 +83,7 @@ export default function TopBar() {
     <MainContainer>
         <Stat>
           <StatLabel fontSize={{ base: 'xs', md: 'sm' }}>Rank</StatLabel>
-          <StatNumber fontSize={{ base: 'lg', md: 'xl' }}>#{stats.rank}</StatNumber>
+          <StatNumber fontSize={{ base: 'lg', md: 'xl' }}>#{stats.rank || 'N/A'}</StatNumber>
         </Stat>
         <Divider orientation="vertical" h="30px" />
         <Stat>

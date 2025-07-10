@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
 import { useSeason } from '../context/SeasonContext';
+import PageControls from './PageControls'; // 1. IMPORT THE NEW COMPONENT
 import {
   Box,
   Heading,
@@ -12,12 +12,9 @@ import {
   VStack,
   useColorModeValue,
 } from '@chakra-ui/react';
-// --- CORRECTED IMPORTS START ---
 import { FaTrophy, FaPoop, FaHeart } from 'react-icons/fa';
-import { GiCrystalBall } from 'react-icons/gi'; // Use GiCrystalBall from Game Icons
-// --- CORRECTED IMPORTS END ---
+import { GiCrystalBall } from 'react-icons/gi';
 
-// A presentational component for displaying a single stat.
 const StatCard = ({ title, user, value, icon }) => {
   const bgColor = useColorModeValue('gray.100', 'gray.700');
   return (
@@ -44,23 +41,18 @@ const StatCard = ({ title, user, value, icon }) => {
 };
 
 
-const Stats = () => {
+export default function Stats() {
   const { selectedSeason } = useSeason();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Map stat keys to titles and icons for display
   const statDisplayMap = {
-    // --- CORRECTED ICON USAGE START ---
     oracle: { title: 'The Oracle', icon: <GiCrystalBall /> },
-    // --- CORRECTED ICON USAGE END ---
     consistent: { title: 'Mr. Consistent', icon: <FaTrophy /> },
     pooper_star: { title: 'Poopstar', icon: <FaPoop /> },
     homer: { title: 'The Homer', icon: <FaHeart /> },
-    // Add other stats here...
   };
-
 
   useEffect(() => {
     if (!selectedSeason) return;
@@ -132,12 +124,11 @@ const Stats = () => {
 
   return (
     <Box>
-      <Heading as="h1" mb={6}>
-        League Stats: {selectedSeason} Season
+      <Heading as="h1" mb={4}>
+        League Stats
       </Heading>
+      <PageControls /> {/* 2. ADD THE CONTROLS COMPONENT */}
       {renderContent()}
     </Box>
   );
 };
-
-export default Stats;

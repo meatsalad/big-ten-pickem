@@ -1,59 +1,61 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../lib/supabaseClient';
 
 const SeasonContext = createContext();
 
 export const SeasonProvider = ({ children }) => {
-  // Default states to null to indicate they haven't been loaded yet.
-  const [availableSeasons, setAvailableSeasons] = useState(null);
+  const [availableSeasons, setAvailableSeasons] = useState([]);
   const [selectedSeason, setSelectedSeason] = useState(null);
+  
+  // Add state for available and selected weeks
+  const [availableWeeks, setAvailableWeeks] = useState([]);
+  const [selectedWeek, setSelectedWeek] = useState(null);
 
+  // 1. Fetch available seasons on initial load
   useEffect(() => {
     const fetchSeasons = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('games')
-          .select('season');
-        
-        if (error) throw error;
-
-        if (data) {
-          const uniqueSeasons = [...new Set(data.map(g => g.season).filter(Boolean))];
-          const sortedSeasons = uniqueSeasons.sort((a, b) => b - a);
-          setAvailableSeasons(sortedSeasons);
-          
-          // If there are seasons in the DB, set the most recent one as selected.
-          if (sortedSeasons.length > 0) {
-            setSelectedSeason(sortedSeasons[0]);
-          } else {
-            // Otherwise, fallback to the current year.
-            setSelectedSeason(new Date().getFullYear());
-          }
-        } else {
-            // If there's no data, set an empty array and the current year.
-            setAvailableSeasons([]);
-            setSelectedSeason(new Date().getFullYear());
+      const { data } = await supabase.rpc('get_distinct_seasons');
+      if (data) {
+        const seasonList = data.map(s => s.season);
+        setAvailableSeasons(seasonList);
+        if (seasonList.length > 0) {
+          setSelectedSeason(seasonList[0]);
         }
-      } catch (error) {
-        console.error("Error in fetchSeasons:", error);
-        // On error, still set default values to allow the app to render.
-        setAvailableSeasons([]);
-        setSelectedSeason(new Date().getFullYear());
       }
     };
     fetchSeasons();
   }, []);
 
+  // 2. Fetch available weeks whenever the selected season changes
+  useEffect(() => {
+    if (!selectedSeason) return;
+    const fetchWeeks = async () => {
+      const { data, error } = await supabase.rpc('get_distinct_weeks_for_season', { p_season: selectedSeason });
+      if (error) {
+        setAvailableWeeks([]);
+        setSelectedWeek(null);
+      } else {
+        const weekList = data.map(w => w.week);
+        setAvailableWeeks(weekList);
+        // Default to the first week of the new season
+        setSelectedWeek(weekList[0] || null);
+      }
+    };
+    fetchWeeks();
+  }, [selectedSeason]);
+
   const value = {
     availableSeasons,
     selectedSeason,
     setSelectedSeason,
+    availableWeeks,
+    selectedWeek,
+    setSelectedWeek,
   };
 
-  // Only render the rest of the app if the seasons have been determined.
   return (
     <SeasonContext.Provider value={value}>
-      {availableSeasons !== null && children}
+      {children}
     </SeasonContext.Provider>
   );
 };

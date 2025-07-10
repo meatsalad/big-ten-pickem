@@ -51,31 +51,30 @@ const Profile = () => {
       setError(null);
 
       try {
-        // --- THIS BLOCK IS UPDATED ---
-        const [summaryRes, financialsRes, myStatsResponse] = await Promise.all([
-          supabase.rpc('get_user_summary_stats', {
-            p_season: selectedSeason,
-            p_user_id: user.id,
-          }),
-          supabase.rpc('get_user_financials', {
-            p_season: selectedSeason,
-            p_user_id: user.id,
-          }),
-          // This now calls our new serverless function
-          fetch(`/.netlify/functions/get-my-stats?season=${selectedSeason}&user_id=${user.id}`),
-        ]);
+        // --- THIS BLOCK IS NOW FULLY REFACTORED ---
+        const [summaryResponse, financialsResponse, myStatsResponse] = await Promise.all([
+  	fetch(`/.netlify/functions/get-user-summary-stats?season=${selectedSeason}&user_id=${user.id}`),
+  	fetch(`/.netlify/functions/get-user-financials?season=${selectedSeason}&user_id=${user.id}`),
+  	fetch(`/.netlify/functions/get-my-stats?season=${selectedSeason}&user_id=${user.id}`),
+]);
 
-        if (summaryRes.error) throw summaryRes.error;
-        if (financialsRes.error) throw financialsRes.error;
+        if (!summaryResponse.ok) {
+            const errorBody = await summaryResponse.json();
+            throw new Error(`Summary Stats Error: ${errorBody.message}`);
+        }
+        if (!financialsResponse.ok) {
+            const errorBody = await financialsResponse.json();
+            throw new Error(`Financials Error: ${errorBody.message}`);
+        }
         if (!myStatsResponse.ok) {
-          const errorBody = await myStatsResponse.json();
-          throw new Error(errorBody.message);
+            const errorBody = await myStatsResponse.json();
+            throw new Error(`My Stats Error: ${errorBody.message}`);
         }
 
-        setSummaryStats(summaryRes.data?.[0] || null);
-        setFinancials(financialsRes.data?.[0] || null);
+        setSummaryStats(await summaryResponse.json());
+        setFinancials(await financialsResponse.json());
         setMyStats(await myStatsResponse.json());
-        // --- END OF UPDATED BLOCK ---
+        // --- END OF REFACTORED BLOCK ---
 
       } catch (err) {
         console.error('Error fetching profile data:', err);

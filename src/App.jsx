@@ -8,9 +8,10 @@ import Stats from './components/Stats.jsx';
 import Rules from './components/Rules.jsx';
 import Account from './components/Account.jsx';
 import TopBar from './components/TopBar.jsx';
-import Profile from './components/Profile.jsx'; // <-- Was MyStats.jsx
+import Profile from './components/Profile.jsx';
 import Admin from './components/Admin.jsx';
 import OnlineUsers from './components/OnlineUsers.jsx';
+// The SeasonSelector import has been removed from this file.
 
 import {
   Box,
@@ -110,7 +111,6 @@ function AppShell() {
             <NavItem to="/" icon={FaTrophy} isCollapsed={isCollapsed}>Leaderboard</NavItem>
             <NavItem to="/picks" icon={FaClipboardList} isCollapsed={isCollapsed}>Picks</NavItem>
             <NavItem to="/stats" icon={FaChartBar} isCollapsed={isCollapsed}>League Stats</NavItem>
-            {/* Link now points to the user's own profile page */}
             <NavItem to={`/profile/${user.id}`} icon={FaIdBadge} isCollapsed={isCollapsed}>My Stats</NavItem>
             <NavItem to="/rules" icon={FaBook} isCollapsed={isCollapsed}>Rules</NavItem>
             
@@ -152,6 +152,7 @@ function AppShell() {
 
         {/* Main Content Area */}
         <Box flex="1" p={8} overflowY="auto">
+          {/* The redundant SeasonSelector has been removed from here */}
           <Outlet />
         </Box>
       </Flex>
@@ -159,7 +160,6 @@ function AppShell() {
   );
 }
 
-// --- New Protected Route Component ---
 const CommissionerRoute = ({ children }) => {
     const { profile } = useAuth();
     if (profile?.role !== 'commissioner') {
@@ -180,9 +180,7 @@ function App() {
           <Route index element={<Leaderboard />} />
           <Route path="picks" element={<GameList />} />
           <Route path="stats" element={<Stats />} />
-          {/* Add the new dynamic routes */}
           <Route path="profile/:userId" element={<Profile />} />
-          {/* Redirect from old path to new path */}
           <Route path="my-stats" element={<Navigate to={`/profile/${session.user.id}`} replace />} />
           <Route path="rules" element={<Rules />} />
           <Route path="account" element={<Account />} />
