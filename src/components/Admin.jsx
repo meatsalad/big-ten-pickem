@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { useAuth } from '../context/AuthContext';
 import {
   Box,
   Heading,
@@ -10,141 +11,206 @@ import {
   Select,
   Button,
   useToast,
-  Spinner,
   Divider,
   HStack,
-  Input,
   NumberInput,
   NumberInputField,
+  Spinner,
+  Switch,
 } from '@chakra-ui/react';
 
-const EditPickForm = () => {
-  const toast = useToast();
-  const [users, setUsers] = useState([]);
-  const [weeks, setWeeks] = useState([]);
-  const [games, setGames] = useState([]);
+const LeagueSettingsForm = () => {
+    const { session } = useAuth();
+    const toast = useToast();
+    const [settings, setSettings] = useState({});
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
 
-  const [selectedUserId, setSelectedUserId] = useState('');
-  const [selectedWeek, setSelectedWeek] = useState('');
-  const [selectedGameId, setSelectedGameId] = useState('');
-  const [selectedPick, setSelectedPick] = useState(null);
-  const [newPick, setNewPick] = useState('');
-  const [loading, setLoading] = useState(false);
+    useEffect(() => {
+        const fetchSettings = async () => {
+            setLoading(true);
+            const { data } = await supabase
+                .from('settings')
+                .select('setting_name, is_enabled, value');
+            
+            if (data) {
+                const settingsMap = data.reduce((acc, setting) => {
+                    acc[setting.setting_name] = setting;
+                    return acc;
+                }, {});
+                setSettings(settingsMap);
+            }
+            setLoading(false);
+        };
+        fetchSettings();
+    }, []);
 
-  // Fetch initial data for users and weeks
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      const { data: usersData } = await supabase.from('profiles').select('id, username');
-      setUsers(usersData || []);
-      const { data: weeksData } = await supabase.from('games').select('week');
-      if (weeksData) {
-        const uniqueWeeks = [...new Set(weeksData.map(g => g.week))];
-        setWeeks(uniqueWeeks.sort((a,b) => a-b));
+    const handleValueChange = (settingName, newValue) => {
+        setSettings(prev => ({
+            ...prev,
+            [settingName]: { ...prev[settingName], value: newValue }
+        }));
+    };
+    
+    const handleToggleChange = (settingName, newEnabledState) => {
+         setSettings(prev => ({
+            ...prev,
+            [settingName]: { ...prev[settingName], is_enabled: newEnabledState }
+        }));
+    };
+
+    const handleSaveSettings = async () => {
+        setSaving(true);
+        try {
+            // Create an array of update promises
+            const updatePromises = Object.keys(settings).map(key => {
+                const setting = settings[key];
+                return fetch('/.netlify/functions/update-setting', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}`},
+                    body: JSON.stringify({
+                        setting_name: setting.setting_name,
+                        is_enabled: setting.is_enabled,
+                        value: setting.value
+                    })
+                });
+            });
+            
+            const responses = await Promise.all(updatePromises);
+
+            // Check if any of the requests failed
+            const failedResponse = responses.find(res => !res.ok);
+            if (failedResponse) {
+                const errorResult = await failedResponse.json();
+                throw new Error(errorResult.message || "An error occurred while saving one or more settings.");
+            }
+
+            toast({ title: "Settings Saved!", status: 'success' });
+        } catch (error) {
+            toast({ title: "Error Saving Settings", description: error.message, status: 'error' });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (loading) return <Spinner />;
+
+    return (
+        <VStack spacing={4} align="stretch" w="100%">
+            <Heading size="md">League Settings</Heading>
+            <FormControl>
+                <FormLabel>Weekly Buy-In ($)</FormLabel>
+                <NumberInput 
+                    value={settings.weekly_buy_in?.value || ''}
+                    onChange={(val) => handleValueChange('weekly_buy_in', parseInt(val))}
+                >
+                    <NumberInputField />
+                </NumberInput>
+            </FormControl>
+             <FormControl>
+                <FormLabel>Perfect Week Multiplier (e.g., 2 for double)</FormLabel>
+                <NumberInput 
+                    value={settings.perfect_week_multiplier?.value || ''}
+                    onChange={(val) => handleValueChange('perfect_week_multiplier', parseInt(val))}
+                >
+                    <NumberInputField />
+                </NumberInput>
+            </FormControl>
+            <FormControl display="flex" alignItems="center">
+                <FormLabel htmlFor="smack-talk-toggle" mb="0">Enable Smack Talk Mode?</FormLabel>
+                <Switch 
+                    id="smack-talk-toggle" 
+                    isChecked={settings.smack_talk_mode?.is_enabled || false}
+                    onChange={(e) => handleToggleChange('smack_talk_mode', e.target.checked)}
+                />
+            </FormControl>
+            <Button colorScheme="brand" onClick={handleSaveSettings} isLoading={saving}>
+                Save All Settings
+            </Button>
+        </VStack>
+    );
+};
+
+const SettleWeekForm = () => {
+    const { session } = useAuth();
+    const toast = useToast();
+    const [weeks, setWeeks] = useState([]);
+    const [seasons, setSeasons] = useState([]);
+    const [selectedWeek, setSelectedWeek] = useState('');
+    const [selectedSeason, setSelectedSeason] = useState('');
+    const [loading, setLoading] = useState(false);
+  
+    useEffect(() => {
+      const fetchOptions = async () => {
+        const { data: seasonData } = await supabase.rpc('get_distinct_seasons');
+        setSeasons(seasonData?.map(s => s.season) || []);
+        const { data: weekData } = await supabase.rpc('get_distinct_weeks');
+        setWeeks(weekData?.map(w => w.week) || []);
+      };
+      fetchOptions();
+    }, []);
+  
+    const handleSubmit = async () => {
+      if (!selectedSeason || !selectedWeek) {
+        toast({ title: 'Please select a season and a week.', status: 'warning' });
+        return;
       }
-    };
-    fetchInitialData();
-  }, []);
-
-  // Fetch games when a week is selected
-  useEffect(() => {
-    if (!selectedWeek) return;
-    const fetchGames = async () => {
-      const { data } = await supabase.from('games').select('*').eq('week', selectedWeek);
-      setGames(data || []);
-    };
-    fetchGames();
-  }, [selectedWeek]);
-
-  // Fetch a user's pick for a specific game
-  useEffect(() => {
-    if (!selectedUserId || !selectedGameId) {
-        setSelectedPick(null);
-        return;
-    };
-    const fetchPick = async () => {
-        const { data } = await supabase
-            .from('picks')
-            .select('*, games(home_team, away_team)')
-            .eq('user_id', selectedUserId)
-            .eq('game_id', selectedGameId)
-            .single();
-        setSelectedPick(data);
-        setNewPick(data?.selected_team || '');
-    };
-    fetchPick();
-  }, [selectedUserId, selectedGameId]);
-
-  const handleSubmit = async () => {
-    if (!selectedPick || !newPick) {
-        toast({ title: 'Please select a pick and a new team.', status: 'warning' });
-        return;
-    }
-    setLoading(true);
-    try {
-        const response = await fetch('/.netlify/functions/edit-pick', {
-            method: 'POST',
-            body: JSON.stringify({
-                pick_id: selectedPick.id,
-                new_selected_team: newPick
-            })
+      if (!window.confirm(`Are you sure you want to settle Week ${selectedWeek} for the ${selectedSeason} season? This will grade all picks and cannot be easily undone.`)) {
+          return;
+      }
+      setLoading(true);
+      try {
+        const response = await fetch('/.netlify/functions/settle-most-recent-week', {
+          method: 'POST',
+          headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({
+            season: parseInt(selectedSeason),
+            week: parseInt(selectedWeek),
+          }),
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error);
-        toast({ title: 'Pick updated successfully!', status: 'success' });
-    } catch (error) {
-        toast({ title: 'Error updating pick', description: error.message, status: 'error' });
-    } finally {
+        if (!response.ok) throw new Error(result.message);
+        toast({ title: 'Week settled successfully!', status: 'success', duration: 5000, isClosable: true });
+      } catch (error) {
+        toast({ title: 'Error settling week', description: error.message, status: 'error', duration: 5000, isClosable: true });
+      } finally {
         setLoading(false);
-    }
-  };
-
-  return (
-    <VStack spacing={4} align="stretch">
-      <Heading size="md">Edit a Player's Pick</Heading>
-      <FormControl>
-        <FormLabel>Select Player</FormLabel>
-        <Select placeholder="Select player" value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)}>
-          {users.map(user => <option key={user.id} value={user.id}>{user.username}</option>)}
-        </Select>
-      </FormControl>
-      <FormControl>
-        <FormLabel>Select Week</FormLabel>
-        <Select placeholder="Select week" value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)}>
-          {weeks.map(week => <option key={week} value={week}>Week {week}</option>)}
-        </Select>
-      </FormControl>
-      {selectedWeek && (
-        <FormControl>
-          <FormLabel>Select Game</FormLabel>
-          <Select placeholder="Select game" value={selectedGameId} onChange={(e) => setSelectedGameId(e.target.value)}>
-            {games.map(game => <option key={game.id} value={game.id}>{game.away_team} @ {game.home_team}</option>)}
-          </Select>
-        </FormControl>
-      )}
-      {selectedPick ? (
-        <>
-            <Text>Current Pick: <strong>{selectedPick.selected_team}</strong></Text>
-            <FormControl>
-                <FormLabel>New Pick</FormLabel>
-                <Select value={newPick} onChange={(e) => setNewPick(e.target.value)}>
-                    <option value={selectedPick.games.home_team}>{selectedPick.games.home_team}</option>
-                    <option value={selectedPick.games.away_team}>{selectedPick.games.away_team}</option>
-                </Select>
-            </FormControl>
-        </>
-      ) : (
-          selectedUserId && selectedGameId && <Text>No pick found for this player and game.</Text>
-      )}
-      <Button colorScheme="blue" onClick={handleSubmit} isLoading={loading} isDisabled={!selectedPick}>Update Pick</Button>
-    </VStack>
-  );
+      }
+    };
+  
+    return (
+      <VStack spacing={4} align="stretch" w="100%">
+        <Heading size="md">Settle a Week</Heading>
+        <Text fontSize="sm">This action will grade all picks for the selected week and finalize the results.</Text>
+        <HStack>
+          <FormControl>
+            <FormLabel>Select Season</FormLabel>
+            <Select placeholder="Select season" value={selectedSeason} onChange={(e) => setSelectedSeason(e.target.value)}>
+              {seasons.map(season => <option key={season} value={season}>{season}</option>)}
+            </Select>
+          </FormControl>
+          <FormControl>
+            <FormLabel>Select Week</FormLabel>
+            <Select placeholder="Select week" value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)}>
+              {weeks.map(week => <option key={week} value={week}>Week {week}</option>)}
+            </Select>
+          </FormControl>
+        </HStack>
+        <Button colorScheme="red" onClick={handleSubmit} isLoading={loading} isDisabled={!selectedWeek || !selectedSeason}>
+          Settle Week
+        </Button>
+      </VStack>
+    );
 };
 
 const CorrectScoreForm = () => {
+    const { session } = useAuth();
     const toast = useToast();
     const [weeks, setWeeks] = useState([]);
     const [games, setGames] = useState([]);
-
     const [selectedWeek, setSelectedWeek] = useState('');
     const [selectedGameId, setSelectedGameId] = useState('');
     const [selectedGame, setSelectedGame] = useState(null);
@@ -154,17 +220,17 @@ const CorrectScoreForm = () => {
 
     useEffect(() => {
         const fetchWeeks = async () => {
-            const { data } = await supabase.from('games').select('week');
-            if(data) {
-                const uniqueWeeks = [...new Set(data.map(g => g.week))];
-                setWeeks(uniqueWeeks.sort((a,b) => a-b));
-            }
+            const { data } = await supabase.rpc('get_distinct_weeks');
+            setWeeks(data?.map(w => w.week) || []);
         };
         fetchWeeks();
     }, []);
 
     useEffect(() => {
-        if (!selectedWeek) return;
+        if (!selectedWeek) {
+          setGames([]);
+          return;
+        };
         const fetchGames = async () => {
             const { data } = await supabase.from('games').select('*').eq('week', selectedWeek);
             setGames(data || []);
@@ -184,33 +250,49 @@ const CorrectScoreForm = () => {
     }, [selectedGameId, games]);
 
     const handleSubmit = async () => {
-        if (!selectedGame) return;
+        if (!selectedGame || homeScore === '' || awayScore === '') {
+            toast({ title: 'Please select a game and enter both scores.', status: 'warning' });
+            return;
+        }
         setLoading(true);
+        const home = parseInt(homeScore);
+        const away = parseInt(awayScore);
+        let winningTeam = null; 
+        if (home > away) {
+            winningTeam = selectedGame.home_team;
+        } else if (away > home) {
+            winningTeam = selectedGame.away_team;
+        }
         try {
-            const response = await fetch('/.netlify/functions/correct-game-score', {
-                method: 'POST',
-                body: JSON.stringify({
-                    game_id: selectedGame.id,
-                    home_score: parseInt(homeScore),
-                    away_score: parseInt(awayScore)
-                })
-            });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error);
-            toast({ title: 'Score corrected successfully!', status: 'success' });
+          const response = await fetch('/.netlify/functions/correct-game-score', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`
+            },
+            body: JSON.stringify({
+              gameId: selectedGame.id,
+              homeTeamScore: home,
+              awayTeamScore: away,
+              winningTeam: winningTeam,
+            }),
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.message);
+          toast({ title: 'Score corrected successfully!', status: 'success' });
         } catch (error) {
-            toast({ title: 'Error correcting score', description: error.message, status: 'error' });
+          toast({ title: 'Error correcting score', description: error.message, status: 'error' });
         } finally {
-            setLoading(false);
+          setLoading(false);
         }
     };
 
     return (
-        <VStack spacing={4} align="stretch">
+        <VStack spacing={4} align="stretch" w="100%">
             <Heading size="md">Correct a Game Score</Heading>
             <FormControl>
                 <FormLabel>Select Week</FormLabel>
-                <Select placeholder="Select week" value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)}>
+                <Select placeholder="Select week" value={selectedWeek} onChange={(e) => { setSelectedGameId(''); setSelectedGame(null); setSelectedWeek(e.target.value); }}>
                     {weeks.map(week => <option key={week} value={week}>Week {week}</option>)}
                 </Select>
             </FormControl>
@@ -238,7 +320,130 @@ const CorrectScoreForm = () => {
                     </FormControl>
                 </HStack>
             )}
-            <Button colorScheme="blue" onClick={handleSubmit} isLoading={loading} isDisabled={!selectedGame}>Update Score</Button>
+            <Button colorScheme="brand" onClick={handleSubmit} isLoading={loading} isDisabled={!selectedGame}>Update Score</Button>
+        </VStack>
+    );
+};
+
+const EditPickForm = () => {
+    const { session } = useAuth();
+    const toast = useToast();
+    const [users, setUsers] = useState([]);
+    const [weeks, setWeeks] = useState([]);
+    const [games, setGames] = useState([]);
+    const [selectedUserId, setSelectedUserId] = useState('');
+    const [selectedWeek, setSelectedWeek] = useState('');
+    const [selectedGameId, setSelectedGameId] = useState('');
+    const [selectedPick, setSelectedPick] = useState(null);
+    const [newPick, setNewPick] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        const fetchInitialData = async () => {
+            const { data: usersData } = await supabase.from('profiles').select('id, username');
+            setUsers(usersData || []);
+            const { data: weeksData } = await supabase.rpc('get_distinct_weeks');
+            setWeeks(weeksData?.map(w => w.week) || []);
+        };
+        fetchInitialData();
+    }, []);
+
+    useEffect(() => {
+        if (!selectedWeek) {
+            setGames([]);
+            return;
+        };
+        const fetchGames = async () => {
+            const { data } = await supabase.from('games').select('*').eq('week', selectedWeek);
+            setGames(data || []);
+        };
+        fetchGames();
+    }, [selectedWeek]);
+
+    useEffect(() => {
+        if (!selectedUserId || !selectedGameId) {
+            setSelectedPick(null);
+            return;
+        };
+        const fetchPick = async () => {
+            const { data } = await supabase
+                .from('picks')
+                .select('*, games(home_team, away_team)')
+                .eq('user_id', selectedUserId)
+                .eq('game_id', selectedGameId)
+                .single();
+            setSelectedPick(data);
+            setNewPick(data?.selected_team || '');
+        };
+        fetchPick();
+    }, [selectedUserId, selectedGameId]);
+
+    const handleSubmit = async () => {
+        if (!selectedPick || !newPick) {
+            toast({ title: 'Please select a pick and a new team.', status: 'warning' });
+            return;
+        }
+        setLoading(true);
+        try {
+            const response = await fetch('/.netlify/functions/edit-pick', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`
+                },
+                body: JSON.stringify({
+                    pickId: selectedPick.id,
+                    newSelectedTeam: newPick
+                })
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.message);
+            toast({ title: 'Pick updated successfully!', status: 'success' });
+        } catch (error) {
+            toast({ title: 'Error updating pick', description: error.message, status: 'error' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <VStack spacing={4} align="stretch" w="100%">
+            <Heading size="md">Edit a Player's Pick</Heading>
+            <FormControl>
+                <FormLabel>Select Player</FormLabel>
+                <Select placeholder="Select player" value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)}>
+                    {users.map(user => <option key={user.id} value={user.id}>{user.username}</option>)}
+                </Select>
+            </FormControl>
+            <FormControl>
+                <FormLabel>Select Week</FormLabel>
+                <Select placeholder="Select week" value={selectedWeek} onChange={(e) => { setSelectedGameId(''); setSelectedPick(null); setSelectedWeek(e.target.value); }}>
+                    {weeks.map(week => <option key={week} value={week}>Week {week}</option>)}
+                </Select>
+            </FormControl>
+            {selectedWeek && (
+                <FormControl>
+                    <FormLabel>Select Game</FormLabel>
+                    <Select placeholder="Select game" value={selectedGameId} onChange={(e) => setSelectedGameId(e.target.value)}>
+                        {games.map(game => <option key={game.id} value={game.id}>{game.away_team} @ {game.home_team}</option>)}
+                    </Select>
+                </FormControl>
+            )}
+            {selectedPick ? (
+                <>
+                    <Text>Current Pick: <strong>{selectedPick.selected_team}</strong></Text>
+                    <FormControl>
+                        <FormLabel>New Pick</FormLabel>
+                        <Select value={newPick} onChange={(e) => setNewPick(e.target.value)}>
+                            <option value={selectedPick.games.home_team}>{selectedPick.games.home_team}</option>
+                            <option value={selectedPick.games.away_team}>{selectedPick.games.away_team}</option>
+                        </Select>
+                    </FormControl>
+                </>
+            ) : (
+                selectedUserId && selectedGameId && <Text>No pick found for this player and game.</Text>
+            )}
+            <Button colorScheme="brand" onClick={handleSubmit} isLoading={loading} isDisabled={!selectedPick}>Update Pick</Button>
         </VStack>
     );
 };
@@ -246,11 +451,13 @@ const CorrectScoreForm = () => {
 
 export default function Admin() {
   return (
-    <Box>
+    <Box maxW="600px" mx="auto">
       <Heading size="lg" mb={8}>Commissioner Dashboard</Heading>
-      <VStack spacing={8} divider={<Divider />}>
-        <EditPickForm />
+      <VStack spacing={10} divider={<Divider />}>
+        <LeagueSettingsForm />
+        <SettleWeekForm />
         <CorrectScoreForm />
+        <EditPickForm />
       </VStack>
     </Box>
   );

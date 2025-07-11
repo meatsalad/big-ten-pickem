@@ -1,5 +1,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { supabase } from '../supabaseClient';
+import { useToast } from '@chakra-ui/react';
+import { STANDARD_MESSAGES, SMACK_TALK_MESSAGES } from '../lib/messages';
 
 const AuthContext = createContext();
 
@@ -8,15 +10,15 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
 
+  // This effect handles setting the user session from Supabase
   useEffect(() => {
-    // 1. Initial check for the session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      setLoading(false); // <-- Crucially, set loading to false after the session is checked
+      setLoading(false);
 
-      // 2. Set up the listener for future auth changes
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         (_event, session) => {
           setSession(session);
@@ -24,14 +26,13 @@ export const AuthProvider = ({ children }) => {
         }
       );
 
-      // Cleanup the subscription when the component unmounts
       return () => {
         subscription?.unsubscribe();
       };
     });
   }, []);
 
-  // 3. A separate effect to fetch the profile whenever the user object changes
+  // This separate effect handles fetching the user's profile when they log in
   useEffect(() => {
     if (user) {
       supabase
@@ -47,7 +48,40 @@ export const AuthProvider = ({ children }) => {
     }
   }, [user]);
 
-  // This function is still useful for manual refreshes, like on the Account page
+  // --- NEW, DEDICATED EFFECT FOR THE WELCOME MESSAGE ---
+  useEffect(() => {
+    // Only run if we have a user and haven't shown the message this session
+    if (user && !sessionStorage.getItem('welcomeMessageShown')) {
+      const showWelcomeMessage = async () => {
+        try {
+          const { data: setting } = await supabase
+            .from('settings')
+            .select('is_enabled')
+            .eq('setting_name', 'smack_talk_mode')
+            .single();
+          
+          const messageList = setting?.is_enabled ? SMACK_TALK_MESSAGES : STANDARD_MESSAGES;
+          const message = messageList[Math.floor(Math.random() * messageList.length)];
+          
+          toast({
+            title: message,
+            status: 'info',
+            duration: 5000,
+            isClosable: true,
+            position: 'top',
+          });
+
+          sessionStorage.setItem('welcomeMessageShown', 'true');
+        } catch (error) {
+          console.error("Could not display welcome message:", error);
+        }
+      };
+      
+      showWelcomeMessage();
+    }
+  }, [user, toast]); // This effect runs when the user object is first populated
+
+
   const refreshProfile = async () => {
     if (user) {
       const { data: profileData } = await supabase
@@ -64,7 +98,11 @@ export const AuthProvider = ({ children }) => {
     user,
     profile,
     refreshProfile,
-    signOut: () => supabase.auth.signOut(),
+    signOut: () => {
+      // Clear the session flag on sign out
+      sessionStorage.removeItem('welcomeMessageShown');
+      supabase.auth.signOut();
+    },
   };
 
   return (

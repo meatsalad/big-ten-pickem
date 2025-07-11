@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSeason } from '../context/SeasonContext';
-import PageControls from './PageControls'; // 1. IMPORT THE NEW COMPONENT
+import PageControls from './PageControls';
 import {
   Box,
   Heading,
@@ -11,11 +11,15 @@ import {
   Text,
   VStack,
   useColorModeValue,
+  Icon,
+  HStack, // <-- HStack is now imported
 } from '@chakra-ui/react';
-import { FaTrophy, FaPoop, FaHeart } from 'react-icons/fa';
+// Import all the necessary icons, including the new ones
+import { FaTrophy, FaPoop, FaHeart, FaHome, FaBus, FaHandshake, FaDollarSign, FaBomb, FaUserSecret } from 'react-icons/fa';
 import { GiCrystalBall } from 'react-icons/gi';
 
-const StatCard = ({ title, user, value, icon }) => {
+
+const StatCard = ({ title, user, value, icon, description }) => {
   const bgColor = useColorModeValue('gray.100', 'gray.700');
   return (
     <VStack
@@ -26,13 +30,14 @@ const StatCard = ({ title, user, value, icon }) => {
       align="flex-start"
       spacing={1}
     >
-      <Box color="gray.500" fontSize="2xl">
-        {icon}
-      </Box>
-      <Text fontSize="md" color="gray.500">
-        {title}
+      <HStack spacing={3} align="center">
+        <Icon as={icon} w={6} h={6} color="brand.500" />
+        <Heading size="md">{title}</Heading>
+      </HStack>
+      <Text fontSize="sm" color="gray.500" fontStyle="italic" pb={2}>
+        {description}
       </Text>
-      <Text fontSize="2xl" fontWeight="bold">
+      <Text fontSize="xl" fontWeight="bold">
         {user}
       </Text>
       <Text fontSize="lg">{value}</Text>
@@ -48,11 +53,19 @@ export default function Stats() {
   const [error, setError] = useState(null);
 
   const statDisplayMap = {
-    oracle: { title: 'The Oracle', icon: <GiCrystalBall /> },
-    consistent: { title: 'Mr. Consistent', icon: <FaTrophy /> },
-    pooper_star: { title: 'Poopstar', icon: <FaPoop /> },
-    homer: { title: 'The Homer', icon: <FaHeart /> },
+    oracle: { title: 'The Oracle', icon: GiCrystalBall, description: 'Most total correct picks for the season.' },
+    consistent: { title: 'Mr. Consistent', icon: FaTrophy, description: 'Highest picking percentage (min. 5 weeks played).' },
+    pooper_star: { title: 'Pooperstar', icon: FaPoop, description: 'Most weeks with the lowest score.' },
+    homer: { title: 'The Homer', icon: FaHeart, description: 'Most picks for their declared favorite team.'},
+    road_warrior: { title: 'Road Warrior', icon: FaBus, description: 'Most correct picks on away teams.'},
+    front_runner: { title: 'Front Runner', icon: FaHome, description: 'Most correct picks on home teams.'},
+    perfectionist: { title: 'The Perfectionist', icon: FaTrophy, description: 'Most weeks with a perfect score.'},
+    rivalry_king: { title: 'Rivalry King', icon: FaHandshake, description: 'Most correct picks in designated rivalry games.'},
+    price_is_right: { title: 'The Price is Right', icon: FaDollarSign, description: 'Lowest average score differential in tiebreakers.'},
+    biggest_blowout: { title: 'Biggest Blowout', icon: FaBomb, description: 'Correctly picked the game with the largest margin of victory.'},
+    contrarian: { title: 'The Contrarian', icon: FaUserSecret, description: 'Most correct picks on unpopular teams.'}
   };
+
 
   useEffect(() => {
     if (!selectedSeason) return;
@@ -64,12 +77,10 @@ export default function Stats() {
 
        try {
         const response = await fetch(`/.netlify/functions/get-league-stats?season=${selectedSeason}`);
-        
         if (!response.ok) {
           const errorBody = await response.json();
           throw new Error(errorBody.message || `Request failed with status ${response.status}`);
         }
-
         const data = await response.json();
         setStats(data);
       } catch (err) {
@@ -87,7 +98,6 @@ export default function Stats() {
     if (loading) {
       return <Spinner size="xl" />;
     }
-
     if (error) {
       return (
         <Alert status="error" borderRadius="md">
@@ -97,7 +107,8 @@ export default function Stats() {
       );
     }
     
-    if (!stats || Object.values(stats).every(val => val === null)) {
+    const hasStats = stats && Object.values(stats).some(val => val !== null);
+    if (!hasStats) {
         return <Text>No stats available for the {selectedSeason} season yet.</Text>
     }
 
@@ -105,19 +116,26 @@ export default function Stats() {
       <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
         {Object.entries(stats)
           .filter(([key, value]) => value && statDisplayMap[key])
-          .map(([key, value]) => (
-            <StatCard
-              key={key}
-              title={statDisplayMap[key].title}
-              icon={statDisplayMap[key].icon}
-              user={value.username}
-              value={`${
-                key === 'consistent' 
-                ? parseFloat(value.value).toFixed(2) + '%' 
-                : value.value
-              }`}
-            />
-          ))}
+          .map(([key, value]) => {
+            const displayInfo = statDisplayMap[key];
+            const statValue = typeof value.value === 'number' ? value.value.toFixed(1) : value.value;
+            return (
+              <StatCard
+                key={key}
+                title={displayInfo.title}
+                icon={displayInfo.icon}
+                description={displayInfo.description}
+                user={value.username}
+                value={`${
+                  key === 'consistent' || key === 'contrarian'
+                  ? statValue + '%' 
+                  : key === 'price_is_right'
+                  ? `${statValue} pts avg diff`
+                  : value.value
+                }`}
+              />
+            )
+          })}
       </SimpleGrid>
     );
   };
@@ -127,7 +145,7 @@ export default function Stats() {
       <Heading as="h1" mb={4}>
         League Stats
       </Heading>
-      <PageControls /> {/* 2. ADD THE CONTROLS COMPONENT */}
+      <PageControls />
       {renderContent()}
     </Box>
   );

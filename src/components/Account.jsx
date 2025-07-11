@@ -15,12 +15,153 @@ import {
   Spinner,
   HStack,
   Select,
+  Divider,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalFooter,
+  ModalBody,
+  ModalCloseButton,
+  useDisclosure,
+  Text,
 } from '@chakra-ui/react';
 
-export default function Account() {
-  const { user, refreshProfile } = useAuth(); // <-- Get the refresh function
-  const toast = useToast();
+const PasswordUpdateForm = () => {
+    const toast = useToast();
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [loading, setLoading] = useState(false);
 
+    const handlePasswordUpdate = async (e) => {
+        e.preventDefault();
+
+        if (newPassword.length < 6) {
+            toast({ title: 'Password must be at least 6 characters long.', status: 'warning' });
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            toast({ title: 'Passwords do not match.', status: 'error' });
+            return;
+        }
+
+        setLoading(true);
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+        if (error) {
+            toast({ title: 'Error updating password.', description: error.message, status: 'error' });
+        } else {
+            toast({ title: 'Password updated successfully!', status: 'success' });
+            setNewPassword('');
+            setConfirmPassword('');
+        }
+        setLoading(false);
+    };
+
+    return (
+        <Box as="form" onSubmit={handlePasswordUpdate} w="100%" maxW="md">
+            <VStack spacing={4} align="start">
+                <Heading size="md">Change Password</Heading>
+                <FormControl>
+                    <FormLabel>New Password</FormLabel>
+                    <Input 
+                        type="password" 
+                        value={newPassword} 
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="Enter new password"
+                    />
+                </FormControl>
+                <FormControl>
+                    <FormLabel>Confirm New Password</FormLabel>
+                    <Input 
+                        type="password" 
+                        value={confirmPassword} 
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Confirm new password"
+                    />
+                </FormControl>
+                <Button type="submit" colorScheme="brand" isLoading={loading}>
+                    Change Password
+                </Button>
+            </VStack>
+        </Box>
+    );
+};
+
+const DeleteAccountForm = () => {
+    const { user, profile, signOut, session } = useAuth();
+    const toast = useToast();
+    const { isOpen, onOpen, onClose } = useDisclosure();
+    const [confirmationText, setConfirmationText] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleDeleteAccount = async () => {
+        if (confirmationText !== profile?.username) {
+            toast({ title: 'Confirmation text does not match username.', status: 'error' });
+            return;
+        }
+        setLoading(true);
+        try {
+            const response = await fetch('/.netlify/functions/delete-user', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${session.access_token}` },
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to delete account.');
+            }
+            toast({ title: 'Account deleted successfully.', status: 'success', duration: 5000, isClosable: true });
+            // Sign out to complete the process
+            signOut(); 
+        } catch (error) {
+            toast({ title: 'Error deleting account.', description: error.message, status: 'error' });
+            setLoading(false);
+        }
+    };
+    
+    return (
+        <Box w="100%" maxW="md" p={4} borderWidth="1px" borderColor="red.500" borderRadius="md">
+            <VStack spacing={4} align="start">
+                <Heading size="md" color="red.500">Danger Zone</Heading>
+                <Text>Deleting your account is permanent and cannot be undone.</Text>
+                <Button colorScheme="red" onClick={onOpen}>Delete My Account</Button>
+            </VStack>
+
+            <Modal isOpen={isOpen} onClose={onClose} isCentered>
+                <ModalOverlay />
+                <ModalContent>
+                    <ModalHeader>Are you absolutely sure?</ModalHeader>
+                    <ModalCloseButton />
+                    <ModalBody>
+                        <Text mb={4}>This action is irreversible. All of your picks and results will be erased. To confirm, please type your username "<strong>{profile?.username}</strong>" below.</Text>
+                        <FormControl>
+                            <Input 
+                                placeholder="Type your username to confirm"
+                                value={confirmationText}
+                                onChange={(e) => setConfirmationText(e.target.value)}
+                            />
+                        </FormControl>
+                    </ModalBody>
+                    <ModalFooter>
+                        <Button variant="ghost" mr={3} onClick={onClose}>Cancel</Button>
+                        <Button 
+                            colorScheme="red" 
+                            onClick={handleDeleteAccount}
+                            isLoading={loading}
+                            isDisabled={confirmationText !== profile?.username}
+                        >
+                            I understand, delete my account
+                        </Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+        </Box>
+    );
+};
+
+export default function Account() {
+  const { user, refreshProfile } = useAuth();
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
@@ -46,7 +187,9 @@ export default function Account() {
       setLoading(false);
     };
 
-    getProfile();
+    if (user) {
+        getProfile();
+    }
   }, [user]);
 
   const handleUpdateProfile = async (e) => {
@@ -61,7 +204,7 @@ export default function Account() {
       toast({ title: 'Error updating profile.', description: error.message, status: 'error' });
     } else {
       toast({ title: 'Profile updated!', status: 'success' });
-      await refreshProfile(); // <-- Call the refresh function here
+      await refreshProfile();
     }
     setLoading(false);
   };
@@ -95,23 +238,22 @@ export default function Account() {
     } else {
       setAvatarUrl(publicUrl);
       toast({ title: 'Avatar updated!', status: 'success' });
-      await refreshProfile(); // <-- Also refresh after avatar upload
+      await refreshProfile();
     }
     setUploading(false);
   };
 
-
-  if (loading && !username) {
+  if (loading) {
     return <Spinner />;
   }
 
   return (
     <Box>
-      <VStack spacing={8} align="start">
+      <VStack spacing={8} divider={<Divider />} align="start">
         <Box>
           <Heading size="md" mb={4}>Avatar</Heading>
           <HStack spacing={4}>
-            <Avatar size="xl" src={avatarUrl} />
+            <Avatar size="xl" src={avatarUrl} name={username || user.email} />
             <FormControl>
               <FormLabel htmlFor="avatar-upload" cursor="pointer">
                 <Button as="span" isLoading={uploading}>
@@ -134,7 +276,6 @@ export default function Account() {
               <FormLabel>Username</FormLabel>
               <Input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="e.g., The Commish" />
             </FormControl>
-            
             <FormControl>
               <FormLabel>Favorite Team</FormLabel>
               <Select
@@ -149,12 +290,16 @@ export default function Account() {
                 ))}
               </Select>
             </FormControl>
-
-            <Button type="submit" colorScheme="blue" isLoading={loading}>
+            <Button type="submit" colorScheme="brand" isLoading={loading}>
               Update Profile
             </Button>
           </VStack>
         </Box>
+
+        <PasswordUpdateForm />
+
+        <DeleteAccountForm />
+        
       </VStack>
     </Box>
   );
