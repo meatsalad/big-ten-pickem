@@ -11,7 +11,7 @@ import TopBar from './components/TopBar.jsx';
 import Profile from './components/Profile.jsx';
 import Admin from './components/Admin.jsx';
 import OnlineUsers from './components/OnlineUsers.jsx';
-// The SeasonSelector import has been removed from this file.
+import LeagueOnboarding from './components/LeagueOnboarding.jsx'; // 1. Import the new component
 
 import {
   Box,
@@ -152,7 +152,6 @@ function AppShell() {
 
         {/* Main Content Area */}
         <Box flex="1" p={8} overflowY="auto">
-          {/* The redundant SeasonSelector has been removed from here */}
           <Outlet />
         </Box>
       </Flex>
@@ -184,6 +183,7 @@ function App() {
           <Route path="my-stats" element={<Navigate to={`/profile/${session.user.id}`} replace />} />
           <Route path="rules" element={<Rules />} />
           <Route path="account" element={<Account />} />
+          <Route path="create-league" element={<LeagueOnboarding />} /> {/* 2. Add the new route */}
           <Route 
             path="admin" 
             element={

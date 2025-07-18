@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
-import { useLeague } from '../context/LeagueContext'; // 1. Import the league hook
+import { useLeague } from '../context/LeagueContext';
 import { BIG_TEN_TEAMS } from '../lib/teams';
+import { Link as RouterLink } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -29,8 +30,94 @@ import {
   List,
   ListItem,
   ListIcon,
+  Flex,
+  Spacer,
+  Tag,
+  IconButton,
+  useClipboard, // 1. Import new hooks and components
 } from '@chakra-ui/react';
-import { FaTrophy } from 'react-icons/fa';
+import { FaTrophy, FaPlus, FaUserFriends, FaCopy } from 'react-icons/fa'; // 2. Import Copy icon
+
+
+// 3. UPDATED League Management Component
+const LeagueManagementSection = ({ availableLeagues }) => {
+  return (
+      <Box w="100%" maxW="md">
+          <Heading size="md" mb={4}>League Management</Heading>
+          <Text mb={2}>You are a member of the following leagues:</Text>
+          <List spacing={3} mb={4}>
+              {availableLeagues.length > 0 ? (
+                  availableLeagues.map(league => (
+                      <LeagueListItem key={league.id} league={league} />
+                  ))
+              ) : (
+                  <Text fontStyle="italic">You haven't joined any leagues yet.</Text>
+              )}
+          </List>
+          <HStack spacing={4}>
+              <Button 
+                  as={RouterLink} 
+                  to="/create-league" 
+                  leftIcon={<FaPlus />}
+                  colorScheme="brand"
+              >
+                  Create a League
+              </Button>
+              <Button 
+                  as={RouterLink}
+                  to="/join-league"
+                  leftIcon={<FaUserFriends />}
+              >
+                  Join a League
+              </Button>
+          </HStack>
+      </Box>
+  );
+};
+
+// 4. NEW Sub-component for the list item to handle copy logic cleanly
+const LeagueListItem = ({ league }) => {
+    const { hasCopied, onCopy } = useClipboard(league.invite_code);
+    const toast = useToast();
+
+    const handleCopy = () => {
+        onCopy();
+        toast({
+            title: "Copied!",
+            description: "Invite code has been copied to your clipboard.",
+            status: "success",
+            duration: 3000,
+            isClosable: true,
+        });
+    };
+    
+    return (
+        <ListItem>
+            <Flex align="center">
+                <HStack>
+                    <ListIcon as={FaTrophy} color="brand.500" />
+                    <Text>{league.name}</Text>
+                </HStack>
+                <Spacer />
+                {league.is_creator && (
+                    <HStack>
+                        <Tag size="md" colorScheme="teal" variant="solid">
+                            Code: {league.invite_code}
+                        </Tag>
+                        <IconButton
+                            aria-label="Copy invite code"
+                            icon={<FaCopy />}
+                            size="sm"
+                            onClick={handleCopy}
+                            variant="ghost"
+                        />
+                    </HStack>
+                )}
+            </Flex>
+        </ListItem>
+    );
+};
+
 
 const PasswordUpdateForm = () => {
     const toast = useToast();
@@ -162,7 +249,7 @@ const DeleteAccountForm = () => {
 
 export default function Account() {
   const { user, refreshProfile } = useAuth();
-  const { availableLeagues, loadingLeagues } = useLeague(); // 2. Get leagues from context
+  const { availableLeagues, loadingLeagues } = useLeague();
   const toast = useToast();
   
   const [loading, setLoading] = useState(true);
@@ -246,25 +333,14 @@ export default function Account() {
     setUploading(false);
   };
 
-  if (loading || loadingLeagues) { // 3. Also check if leagues are loading
+  if (loading || loadingLeagues) {
     return <Spinner />;
   }
 
   return (
     <Box>
       <VStack spacing={8} divider={<Divider />} align="start">
-        {/* --- 4. NEW MY LEAGUES SECTION --- */}
-        <Box w="100%" maxW="md">
-            <Heading size="md" mb={4}>My Leagues</Heading>
-            <List spacing={3}>
-                {availableLeagues.map(league => (
-                    <ListItem key={league.id}>
-                        <ListIcon as={FaTrophy} color="brand.500" />
-                        {league.name}
-                    </ListItem>
-                ))}
-            </List>
-        </Box>
+        <LeagueManagementSection availableLeagues={availableLeagues} />
 
         <Box>
           <Heading size="md" mb={4}>Avatar</Heading>

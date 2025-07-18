@@ -1,36 +1,100 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { useSeason } from '../context/SeasonContext';
 import { useLeague } from '../context/LeagueContext';
 import PageControls from './PageControls';
+import GameCard from './GameCard';
+import CountdownTimer from './CountdownTimer'; // 1. Import the new component
 import {
   Box,
   Heading,
   Spinner,
   Alert,
   AlertIcon,
-  Grid,
-  GridItem,
   Text,
   Center,
   VStack,
   Button,
+  SimpleGrid,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  TableContainer,
+  Avatar,
   HStack,
-  IconButton,
 } from '@chakra-ui/react';
-import { ArrowLeftIcon, ArrowRightIcon } from '@chakra-ui/icons';
+
+
+const PicksMatrixView = ({ games, players, picks }) => {
+    const { user } = useAuth();
+    
+    return (
+        <TableContainer borderWidth="1px" borderRadius="lg">
+            <Table variant="simple">
+                <Thead bg="gray.100" position="sticky" top="0" zIndex="docked">
+                    <Tr>
+                        <Th>Matchup</Th>
+                        {players.map(player => (
+                            <Th key={player.id} isNumeric={player.id !== user.id} bg={player.id === user.id ? 'brand.50' : 'transparent'}>
+                                <HStack justify={player.id === user.id ? "flex-end" : "flex-start"}>
+                                    <Avatar size="xs" name={player.username} src={player.avatar_url} />
+                                    <Text>{player.username}</Text>
+                                </HStack>
+                            </Th>
+                        ))}
+                    </Tr>
+                </Thead>
+                <Tbody>
+                    {games.map(game => (
+                        <Tr key={game.id}>
+                            <Td>
+                                <VStack align="flex-start" spacing={0}>
+                                    <Text fontSize="sm">{game.away_team}</Text>
+                                    <Text fontSize="xs" color="gray.500">@</Text>
+                                    <Text fontSize="sm" fontWeight="bold">{game.home_team}</Text>
+                                </VStack>
+                            </Td>
+                            {players.map(player => {
+                                const pick = picks.find(p => p.user_id === player.id && p.game_id === game.id);
+                                let pickBgColor = 'transparent';
+                                if (pick?.is_correct === true) pickBgColor = 'green.100';
+                                if (pick?.is_correct === false) pickBgColor = 'red.100';
+
+                                return (
+                                    <Td 
+                                        key={`${game.id}-${player.id}`} 
+                                        isNumeric={player.id !== user.id}
+                                        bg={pickBgColor}
+                                        fontWeight={pick?.selected_team ? 'bold' : 'normal'}
+                                    >
+                                      {pick ? pick.selected_team : '-'}
+                                    </Td>
+                                );
+                            })}
+                        </Tr>
+                    ))}
+                </Tbody>
+            </Table>
+        </TableContainer>
+    );
+};
+
 
 export default function GameList() {
   const { user, session } = useAuth();
   const { selectedSeason, selectedWeek } = useSeason();
-  const { selectedLeague, availableLeagues } = useLeague();
+  const { selectedLeague } = useLeague();
 
   const [games, setGames] = useState([]);
   const [picks, setPicks] = useState([]);
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [viewMode, setViewMode] = useState('cards');
 
   useEffect(() => {
     if (!selectedWeek || !selectedSeason || !selectedLeague || !session) {
@@ -86,105 +150,44 @@ export default function GameList() {
         .select()
         .single();
       if (error) throw error;
-      setPicks(currentPicks => [...currentPicks.filter(p => p.id !== data.id), data]);
+      setPicks(currentPicks => [...currentPicks.filter(p => p.game_id !== game.id || p.user_id !== user.id), data]);
     } catch (error) {
       alert("Error saving your pick: " + error.message);
     }
   };
-
-  const getPickForPlayerAndGame = (playerId, gameId) => {
-    return picks.find(p => p.user_id === playerId && p.game_id === gameId);
-  };
   
-  if (loading) {
-    return (
-        <Box>
-            <Heading as="h1" mb={4}>Picks</Heading>
-            <PageControls showWeekNav={true} />
-            <Center p={10}><Spinner size="xl" /></Center>
-        </Box>
-    );
-  }
+  const renderContent = () => {
+    if (loading) return <Center p={10}><Spinner size="xl" /></Center>;
+    if (error) return <Alert status="error"><AlertIcon />{error}</Alert>;
+    if (games.length === 0) return <Text>No games scheduled for this week.</Text>;
+    
+    if (viewMode === 'matrix') {
+        return <PicksMatrixView games={games} players={players} picks={picks} />;
+    }
 
-  if (error) {
     return (
-        <Box>
-            <Heading as="h1" mb={4}>Picks</Heading>
-            <PageControls showWeekNav={true} />
-            <Alert status="error"><AlertIcon />{error}</Alert>
-        </Box>
+        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+            {games.map(game => {
+                const myPick = picks.find(p => p.user_id === user.id && p.game_id === game.id);
+                return <GameCard key={game.id} game={game} myPick={myPick} onPick={handlePick} />;
+            })}
+        </SimpleGrid>
     );
-  }
+  };
   
   return (
     <Box>
       <Heading as="h1" mb={4}>Picks</Heading>
       <PageControls showWeekNav={true} />
+      
+      {/* 2. Render the CountdownTimer component here */}
+      {!loading && games.length > 0 && <CountdownTimer games={games} />}
+      
+      <Button onClick={() => setViewMode(viewMode === 'cards' ? 'matrix' : 'cards')} mb={4}>
+        {viewMode === 'cards' ? 'View All Picks (Matrix)' : 'View My Picks (Cards)'}
+      </Button>
 
-      {games.length === 0 ? (
-        <Text>No games scheduled for this week.</Text>
-      ) : (
-        <Grid
-          templateColumns={`repeat(${players.length + 1}, 1fr)`}
-          gap={1}
-          bg={['gray.200', 'gray.600']}
-          p={1}
-          borderRadius="md"
-        >
-          <GridItem />
-          {players.map(player => (
-            <GridItem key={player.id} bg={['gray.100', 'gray.800']} p={2}>
-              <Center>
-                <Text fontWeight="bold" textAlign="center" fontSize="sm">{player.username}</Text>
-              </Center>
-            </GridItem>
-          ))}
-          {games.map(game => {
-            const myPick = getPickForPlayerAndGame(user.id, game.id);
-            return(
-              <React.Fragment key={game.id}>
-                <GridItem bg={['gray.100', 'gray.800']} p={2}>
-                  <VStack spacing={1}>
-                    <Button 
-                      size="xs" 
-                      w="full"
-                      onClick={() => handlePick(game, game.away_team)}
-                      colorScheme={myPick?.selected_team === game.away_team ? 'brand' : 'gray'}
-                    >
-                      {game.away_team}
-                    </Button>
-                    <Text fontWeight="bold" fontSize="xs">vs</Text>
-                     <Button 
-                      size="xs" 
-                      w="full"
-                      onClick={() => handlePick(game, game.home_team)}
-                      colorScheme={myPick?.selected_team === game.home_team ? 'brand' : 'gray'}
-                    >
-                      {game.home_team}
-                    </Button>
-                  </VStack>
-                </GridItem>
-                {players.map(player => {
-                  const pick = getPickForPlayerAndGame(player.id, game.id);
-                  let pickBgColor = ['gray.50', 'gray.700']; // Default
-                  if (pick?.is_correct === true) pickBgColor = ['green.100', 'green.800'];
-                  if (pick?.is_correct === false) pickBgColor = ['red.100', 'red.800'];
-                  
-                  return (
-                    <GridItem key={`${game.id}-${player.id}`} bg={pickBgColor} p={4}>
-                      <Center>
-                        <Text fontWeight="bold" fontSize="sm">
-                          {pick ? pick.selected_team : '-'}
-                        </Text>
-                      </Center>
-                    </GridItem>
-                  );
-                })}
-              </React.Fragment>
-            )
-          })}
-        </Grid>
-      )}
+      {renderContent()}
     </Box>
   );
 }
