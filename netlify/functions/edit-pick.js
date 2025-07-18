@@ -1,13 +1,9 @@
 // netlify/functions/edit-pick.js
-
 import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
-import { authorizeCommissioner } from './lib/auth'; // Adjust path if needed
-
-const { VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY } = process.env;
+import { authorizeCommissioner } from './lib/auth';
 
 export const handler = async (event) => {
-  // Disallow non-POST requests
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
@@ -16,28 +12,30 @@ export const handler = async (event) => {
     };
   }
 
-  const supabase = createClient(VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY);
+  // Use the service key for robust permissions
+  const { SUPABASE_URL, SUPABASE_SERVICE_KEY } = process.env;
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
   try {
-    // 1. Authorize the user first
     await authorizeCommissioner(supabase, event);
 
-    // 2. Proceed with business logic only if authorization succeeds
-    const { pickId, newSelectedTeam } = JSON.parse(event.body);
+    // Now requires league_id
+    const { pickId, newSelectedTeam, league_id } = JSON.parse(event.body);
 
-    if (!pickId || !newSelectedTeam) {
-      return { statusCode: 400, body: JSON.stringify({ message: 'Pick ID and new team are required.' }) };
+    if (!pickId || !newSelectedTeam || !league_id) {
+      return { statusCode: 400, body: JSON.stringify({ message: 'Pick ID, new team, and league ID are required.' }) };
     }
 
+    // The update is now scoped to the specific pick AND league
     const { data, error } = await supabase
       .from('picks')
       .update({ selected_team: newSelectedTeam })
       .eq('id', pickId)
+      .eq('league_id', league_id)
       .select();
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
+    if (data.length === 0) throw new Error("Pick not found in the specified league.");
 
     return {
       statusCode: 200,
@@ -45,11 +43,10 @@ export const handler = async (event) => {
     };
 
   } catch (error) {
-    // Catch errors from both authorization and the database operation
     console.error('Error in edit-pick:', error);
     return {
       statusCode: error.statusCode || 500,
-      body: JSON.stringify({ message: error.message || 'Internal Server Error' }),
+      body: JSON.stringify({ message: error.message || 'An internal error occurred.' }),
     };
   }
 };

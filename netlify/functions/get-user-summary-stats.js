@@ -3,25 +3,28 @@ import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 
 export const handler = async (event) => {
-  const { season, user_id } = event.queryStringParameters;
+  // 1. Now requires league_id
+  const { season, user_id, league_id } = event.queryStringParameters;
 
-  if (!season || !user_id) {
-    return { statusCode: 400, body: JSON.stringify({ message: 'Season and user_id are required.' }) };
+  if (!season || !user_id || !league_id) {
+    return { statusCode: 400, body: JSON.stringify({ message: 'Season, user_id, and league_id are required.' }) };
   }
 
-  const { SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // 2. Use the Service Key for robust permissions
+  const { SUPABASE_URL, SUPABASE_SERVICE_KEY } = process.env;
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
   try {
-    // Fetch all weekly results for the season to calculate ranks for all users
+    // 3. Filter the query by league_id
     const { data: allWeeklyResults, error } = await supabase
       .from('weekly_results')
       .select('user_id, is_winner')
-      .eq('season', season);
+      .eq('season', season)
+      .eq('league_id', league_id);
 
     if (error) throw error;
 
-    // --- Calculate wins for every user in JavaScript ---
+    // --- All of the existing JavaScript logic below remains the same ---
     const userScores = allWeeklyResults.reduce((acc, result) => {
       const id = result.user_id;
       if (!acc[id]) {
@@ -35,7 +38,6 @@ export const handler = async (event) => {
       return acc;
     }, {});
 
-    // Create a sorted leaderboard to find the rank
     const leaderboard = Object.keys(userScores)
       .map(id => ({
         user_id: id,
@@ -43,14 +45,11 @@ export const handler = async (event) => {
       }))
       .sort((a, b) => b.wins - a.wins);
 
-    // Find the specific user's rank
     const rank = leaderboard.findIndex(player => player.user_id === user_id) + 1;
-
-    // Get the specific user's stats
     const myStats = userScores[user_id] || { wins: 0, losses: 0 };
 
     const responseData = {
-      rank: rank > 0 ? rank : null, // If user has no score, rank is null
+      rank: rank > 0 ? rank : null,
       weeks_won: myStats.wins,
       weeks_lost: myStats.losses,
     };

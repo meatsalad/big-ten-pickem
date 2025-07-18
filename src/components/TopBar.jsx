@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSeason } from '../context/SeasonContext';
+import { useLeague } from '../context/LeagueContext'; // 1. Import the league hook
 import CompactStats from './CompactStats';
 import {
   Box,
@@ -16,13 +17,15 @@ import {
 export default function TopBar() {
   const { user } = useAuth();
   const { selectedSeason } = useSeason();
+  const { selectedLeague } = useLeague(); // 2. Get the selected league
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const navStyles = useStyleConfig("Navbar");
 
   useEffect(() => {
-    if (!user || !selectedSeason) {
+    // 3. Update the guard clause to wait for the league
+    if (!user || !selectedSeason || !selectedLeague) {
       setLoading(false);
       return;
     }
@@ -33,7 +36,8 @@ export default function TopBar() {
       setStats(null);
 
       try {
-        const response = await fetch(`/.netlify/functions/get-user-summary-stats?season=${selectedSeason}&user_id=${user.id}`);
+        // 4. Update the fetch URL to include the league_id
+        const response = await fetch(`/.netlify/functions/get-user-summary-stats?season=${selectedSeason}&user_id=${user.id}&league_id=${selectedLeague.id}`);
         
         if (!response.ok) {
           const errorData = await response.json();
@@ -51,7 +55,7 @@ export default function TopBar() {
     };
 
     fetchSummaryStats();
-  }, [user, selectedSeason]);
+  }, [user, selectedSeason, selectedLeague]); // 5. Add selectedLeague to the dependency array
 
   const MainContainer = ({ children }) => (
     <Box as="header" p={2} __css={navStyles}>
@@ -61,7 +65,6 @@ export default function TopBar() {
     </Box>
   );
   
-  // If loading, show a spinner. If there's an error, show nothing.
   if (loading) {
     return (
       <MainContainer>
@@ -71,7 +74,7 @@ export default function TopBar() {
   }
   
   if (error || !stats) {
-      return null; // Don't render the bar if there's an error or no stats
+      return null;
   }
 
   const totalWeeksPlayed = (stats.weeks_won || 0) + (stats.weeks_lost || 0);

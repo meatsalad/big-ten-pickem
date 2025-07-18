@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { useSeason } from '../context/SeasonContext';
+import { useLeague } from '../context/LeagueContext';
 import {
   Box,
   Heading,
@@ -28,20 +28,20 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-const Profile = () => {
+export default function Profile() {
   const { user } = useAuth();
   const { selectedSeason } = useSeason();
+  const { selectedLeague } = useLeague();
 
-  // State for each data source
   const [summaryStats, setSummaryStats] = useState(null);
   const [financials, setFinancials] = useState(null);
   const [myStats, setMyStats] = useState(null);
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!user || !selectedSeason) {
+    // Don't run if we don't have all required context
+    if (!user || !selectedSeason || !selectedLeague) {
       setLoading(false);
       return;
     }
@@ -51,12 +51,12 @@ const Profile = () => {
       setError(null);
 
       try {
-        // --- THIS BLOCK IS NOW FULLY REFACTORED ---
+        // Add league_id to all API calls
         const [summaryResponse, financialsResponse, myStatsResponse] = await Promise.all([
-  	fetch(`/.netlify/functions/get-user-summary-stats?season=${selectedSeason}&user_id=${user.id}`),
-  	fetch(`/.netlify/functions/get-user-financials?season=${selectedSeason}&user_id=${user.id}`),
-  	fetch(`/.netlify/functions/get-my-stats?season=${selectedSeason}&user_id=${user.id}`),
-]);
+          fetch(`/.netlify/functions/get-user-summary-stats?season=${selectedSeason}&user_id=${user.id}&league_id=${selectedLeague.id}`),
+          fetch(`/.netlify/functions/get-user-financials?season=${selectedSeason}&user_id=${user.id}&league_id=${selectedLeague.id}`),
+          fetch(`/.netlify/functions/get-my-stats?season=${selectedSeason}&user_id=${user.id}&league_id=${selectedLeague.id}`),
+        ]);
 
         if (!summaryResponse.ok) {
             const errorBody = await summaryResponse.json();
@@ -74,7 +74,6 @@ const Profile = () => {
         setSummaryStats(await summaryResponse.json());
         setFinancials(await financialsResponse.json());
         setMyStats(await myStatsResponse.json());
-        // --- END OF REFACTORED BLOCK ---
 
       } catch (err) {
         console.error('Error fetching profile data:', err);
@@ -85,7 +84,7 @@ const Profile = () => {
     };
 
     fetchProfileData();
-  }, [user, selectedSeason]);
+  }, [user, selectedSeason, selectedLeague]); // Add selectedLeague to dependency array
 
   if (loading) {
     return <Spinner size="xl" />;
@@ -169,5 +168,3 @@ const Profile = () => {
     </Box>
   );
 };
-
-export default Profile;

@@ -3,38 +3,37 @@ import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 
 export const handler = async (event) => {
-  const { season, user_id } = event.queryStringParameters;
+  // 1. Now requires league_id
+  const { season, user_id, league_id } = event.queryStringParameters;
 
-  if (!season || !user_id) {
-    return { statusCode: 400, body: JSON.stringify({ message: 'Season and user_id are required.' }) };
+  if (!season || !user_id || !league_id) {
+    return { statusCode: 400, body: JSON.stringify({ message: 'Season, user_id, and league_id are required.' }) };
   }
 
-  const { SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // 2. Use the Service Key for robust permissions
+  const { SUPABASE_URL, SUPABASE_SERVICE_KEY } = process.env;
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
   try {
-    // 1. Fetch all weekly results for the entire season. This is the only data we need.
+    // 3. Filter the query by league_id
     const { data: allWeeklyResults, error } = await supabase
       .from('weekly_results')
       .select('user_id, week, is_winner, is_perfect')
-      .eq('season', season);
+      .eq('season', season)
+      .eq('league_id', league_id);
 
     if (error) throw error;
 
-    // 2. Filter down to just the weeks the specified user participated in.
+    // --- All of the existing JavaScript logic below remains the same ---
     const userWeeks = allWeeklyResults.filter(r => r.user_id === user_id);
 
     let total_winnings = 0;
     let total_losses = 0;
 
-    // 3. Loop through each week the user played.
     for (const userResult of userWeeks) {
       const { week, is_winner } = userResult;
 
-      // Get all results for the current week from our full dataset
       const resultsForThisWeek = allWeeklyResults.filter(r => r.week === week);
-
-      // Determine the pot size for this week
       const isPerfectWeek = resultsForThisWeek.some(r => r.is_perfect);
       const week_pot = isPerfectWeek ? 20 : 10;
 

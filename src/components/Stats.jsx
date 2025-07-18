@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSeason } from '../context/SeasonContext';
+import { useLeague } from '../context/LeagueContext'; // 1. Import the new hook
 import PageControls from './PageControls';
 import {
   Box,
@@ -12,9 +13,8 @@ import {
   VStack,
   useColorModeValue,
   Icon,
-  HStack, // <-- HStack is now imported
+  HStack,
 } from '@chakra-ui/react';
-// Import all the necessary icons, including the new ones
 import { FaTrophy, FaPoop, FaHeart, FaHome, FaBus, FaHandshake, FaDollarSign, FaBomb, FaUserSecret } from 'react-icons/fa';
 import { GiCrystalBall } from 'react-icons/gi';
 
@@ -48,6 +48,7 @@ const StatCard = ({ title, user, value, icon, description }) => {
 
 export default function Stats() {
   const { selectedSeason } = useSeason();
+  const { selectedLeague } = useLeague(); // 2. Get the selected league from context
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -68,7 +69,11 @@ export default function Stats() {
 
 
   useEffect(() => {
-    if (!selectedSeason) return;
+    // 3. Don't run if either season or league isn't ready
+    if (!selectedSeason || !selectedLeague) {
+      setLoading(false);
+      return;
+    }
 
     const fetchStats = async () => {
       setLoading(true);
@@ -76,7 +81,8 @@ export default function Stats() {
       setStats(null);
 
        try {
-        const response = await fetch(`/.netlify/functions/get-league-stats?season=${selectedSeason}`);
+        // 4. Add the league_id to the API call
+        const response = await fetch(`/.netlify/functions/get-league-stats?season=${selectedSeason}&league_id=${selectedLeague.id}`);
         if (!response.ok) {
           const errorBody = await response.json();
           throw new Error(errorBody.message || `Request failed with status ${response.status}`);
@@ -92,7 +98,7 @@ export default function Stats() {
     };
 
     fetchStats();
-  }, [selectedSeason]);
+  }, [selectedSeason, selectedLeague]); // 5. Add selectedLeague to the dependency array
 
   const renderContent = () => {
     if (loading) {
@@ -109,7 +115,7 @@ export default function Stats() {
     
     const hasStats = stats && Object.values(stats).some(val => val !== null);
     if (!hasStats) {
-        return <Text>No stats available for the {selectedSeason} season yet.</Text>
+        return <Text>No stats available for this season yet.</Text>
     }
 
     return (

@@ -2,16 +2,15 @@ import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 
 export const handler = async (event) => {
-  const { week, season } = event.queryStringParameters;
-  if (!week || !season) {
-    return { statusCode: 400, body: JSON.stringify({ message: 'Week and season are required.' }) };
+  // 1. Now requires league_id
+  const { week, season, league_id } = event.queryStringParameters;
+  if (!week || !season || !league_id) {
+    return { statusCode: 400, body: JSON.stringify({ message: 'Week, season, and league_id are required.' }) };
   }
 
-  // Use the service key to bypass RLS
   const { SUPABASE_URL, SUPABASE_SERVICE_KEY } = process.env;
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-  // We still need to pass the user's auth token to know who "they" are
   const { authorization } = event.headers;
   const token = authorization?.replace('Bearer ', '');
 
@@ -23,9 +22,15 @@ export const handler = async (event) => {
 
     if (lockTimeError) throw lockTimeError;
 
-    let query = supabase.from('picks').select('*').eq('week', week).eq('season', season);
+    // 2. Add league_id filter to the main query
+    let query = supabase
+      .from('picks')
+      .select('*')
+      .eq('week', week)
+      .eq('season', season)
+      .eq('league_id', league_id);
     
-    // If the lock time has NOT passed, only return picks for the logged-in user
+    // The rest of the logic remains the same
     if (new Date() < new Date(lockTime) && token) {
       const { data: { user } } = await supabase.auth.getUser(token);
       if (user) {

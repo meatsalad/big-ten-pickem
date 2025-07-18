@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { useLeague } from '../context/LeagueContext'; // 1. Import the league hook
 import { BIG_TEN_TEAMS } from '../lib/teams';
 import {
   Box,
@@ -25,7 +26,11 @@ import {
   ModalCloseButton,
   useDisclosure,
   Text,
+  List,
+  ListItem,
+  ListIcon,
 } from '@chakra-ui/react';
+import { FaTrophy } from 'react-icons/fa';
 
 const PasswordUpdateForm = () => {
     const toast = useToast();
@@ -35,7 +40,6 @@ const PasswordUpdateForm = () => {
 
     const handlePasswordUpdate = async (e) => {
         e.preventDefault();
-
         if (newPassword.length < 6) {
             toast({ title: 'Password must be at least 6 characters long.', status: 'warning' });
             return;
@@ -44,10 +48,8 @@ const PasswordUpdateForm = () => {
             toast({ title: 'Passwords do not match.', status: 'error' });
             return;
         }
-
         setLoading(true);
         const { error } = await supabase.auth.updateUser({ password: newPassword });
-
         if (error) {
             toast({ title: 'Error updating password.', description: error.message, status: 'error' });
         } else {
@@ -111,7 +113,6 @@ const DeleteAccountForm = () => {
                 throw new Error(errorData.message || 'Failed to delete account.');
             }
             toast({ title: 'Account deleted successfully.', status: 'success', duration: 5000, isClosable: true });
-            // Sign out to complete the process
             signOut(); 
         } catch (error) {
             toast({ title: 'Error deleting account.', description: error.message, status: 'error' });
@@ -126,7 +127,6 @@ const DeleteAccountForm = () => {
                 <Text>Deleting your account is permanent and cannot be undone.</Text>
                 <Button colorScheme="red" onClick={onOpen}>Delete My Account</Button>
             </VStack>
-
             <Modal isOpen={isOpen} onClose={onClose} isCentered>
                 <ModalOverlay />
                 <ModalContent>
@@ -159,9 +159,12 @@ const DeleteAccountForm = () => {
     );
 };
 
+
 export default function Account() {
   const { user, refreshProfile } = useAuth();
+  const { availableLeagues, loadingLeagues } = useLeague(); // 2. Get leagues from context
   const toast = useToast();
+  
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
@@ -243,13 +246,26 @@ export default function Account() {
     setUploading(false);
   };
 
-  if (loading) {
+  if (loading || loadingLeagues) { // 3. Also check if leagues are loading
     return <Spinner />;
   }
 
   return (
     <Box>
       <VStack spacing={8} divider={<Divider />} align="start">
+        {/* --- 4. NEW MY LEAGUES SECTION --- */}
+        <Box w="100%" maxW="md">
+            <Heading size="md" mb={4}>My Leagues</Heading>
+            <List spacing={3}>
+                {availableLeagues.map(league => (
+                    <ListItem key={league.id}>
+                        <ListIcon as={FaTrophy} color="brand.500" />
+                        {league.name}
+                    </ListItem>
+                ))}
+            </List>
+        </Box>
+
         <Box>
           <Heading size="md" mb={4}>Avatar</Heading>
           <HStack spacing={4}>
@@ -297,7 +313,6 @@ export default function Account() {
         </Box>
 
         <PasswordUpdateForm />
-
         <DeleteAccountForm />
         
       </VStack>

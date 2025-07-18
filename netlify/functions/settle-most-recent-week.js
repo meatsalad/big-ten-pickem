@@ -13,9 +13,10 @@ export const handler = async (event) => {
   try {
     await authorizeCommissioner(supabase, event);
 
-    const { week, season } = JSON.parse(event.body);
-    if (!week || !season) {
-      return { statusCode: 400, body: JSON.stringify({ message: 'Week and season are required.' }) };
+    // 1. Now requires league_id
+    const { week, season, league_id } = JSON.parse(event.body);
+    if (!week || !season || !league_id) {
+      return { statusCode: 400, body: JSON.stringify({ message: 'Week, season, and league_id are required.' }) };
     }
 
     const { data: games, error: gamesError } = await supabase
@@ -30,31 +31,37 @@ export const handler = async (event) => {
     
     const winnerMap = new Map(games.map(g => [g.id, g.winning_team]));
 
-    // --- THIS QUERY IS UPDATED ---
+    // 2. Filter picks by league_id
     const { data: picks, error: picksError } = await supabase
       .from('picks')
-      .select('id, user_id, game_id, selected_team') // Added user_id
+      .select('id, user_id, game_id, selected_team')
       .eq('week', week)
-      .eq('season', season);
+      .eq('season', season)
+      .eq('league_id', league_id);
       
     if (picksError) throw picksError;
 
     const gradedPicks = picks.map(pick => ({
       id: pick.id,
-      user_id: pick.user_id, // Ensure user_id is included in the upsert payload
+      user_id: pick.user_id,
       game_id: pick.game_id,
+      league_id: league_id, // Ensure league_id is part of the object for upsert
       selected_team: pick.selected_team,
       is_correct: winnerMap.get(pick.game_id) === pick.selected_team
     }));
 
-    const { error: upsertError } = await supabase.from('picks').upsert(gradedPicks);
-    if (upsertError) throw upsertError;
+    if (gradedPicks.length > 0) {
+        const { error: upsertError } = await supabase.from('picks').upsert(gradedPicks);
+        if (upsertError) throw upsertError;
+    }
     
+    // 3. Filter final picks by league_id
     const { data: finalPicks, error: finalPicksError } = await supabase
       .from('picks')
       .select('user_id, is_correct')
       .eq('week', week)
-      .eq('season', season);
+      .eq('season', season)
+      .eq('league_id', league_id);
     
     if(finalPicksError) throw finalPicksError;
 
@@ -64,27 +71,30 @@ export const handler = async (event) => {
     }, {});
     
     if (Object.keys(scores).length === 0) {
-        return { statusCode: 200, body: JSON.stringify({ message: "Week settled, but no players had picks to grade."})};
+        return { statusCode: 200, body: JSON.stringify({ message: "Week settled, but no players had picks to grade for this league."})};
     }
     
     const maxScore = Math.max(...Object.values(scores));
     const minScore = Math.min(...Object.values(scores));
     
+    // 4. Add league_id to the weekly_results records
     const weeklyResults = Object.entries(scores).map(([user_id, score]) => ({
         user_id,
         week,
         season,
+        league_id,
         is_winner: score === maxScore,
         is_poopstar: score === minScore && Object.values(scores).filter(s => s === maxScore).length === 1,
         is_perfect: score === games.length,
     }));
 
-    const { error: resultsError } = await supabase.from('weekly_results').upsert(weeklyResults, { onConflict: 'user_id, week, season' });
+    // 5. Update the onConflict clause to include league_id
+    const { error: resultsError } = await supabase.from('weekly_results').upsert(weeklyResults, { onConflict: 'user_id, league_id, season, week' });
     if (resultsError) throw resultsError;
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ message: `Week ${week} has been successfully settled.` }),
+      body: JSON.stringify({ message: `Week ${week} has been successfully settled for the selected league.` }),
     };
 
   } catch (error) {

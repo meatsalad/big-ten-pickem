@@ -13,6 +13,7 @@ import {
   useToast,
   Divider,
   HStack,
+  Input,
   NumberInput,
   NumberInputField,
   Spinner,
@@ -62,7 +63,6 @@ const LeagueSettingsForm = () => {
     const handleSaveSettings = async () => {
         setSaving(true);
         try {
-            // Create an array of update promises
             const updatePromises = Object.keys(settings).map(key => {
                 const setting = settings[key];
                 return fetch('/.netlify/functions/update-setting', {
@@ -78,7 +78,6 @@ const LeagueSettingsForm = () => {
             
             const responses = await Promise.all(updatePromises);
 
-            // Check if any of the requests failed
             const failedResponse = responses.find(res => !res.ok);
             if (failedResponse) {
                 const errorResult = await failedResponse.json();
@@ -131,13 +130,95 @@ const LeagueSettingsForm = () => {
     );
 };
 
+const RenameLeagueForm = () => {
+    const { user, session } = useAuth();
+    const toast = useToast();
+    const [myLeagues, setMyLeagues] = useState([]);
+    const [selectedLeagueId, setSelectedLeagueId] = useState('');
+    const [newName, setNewName] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!user) return;
+        const fetchOwnedLeagues = async () => {
+            const { data } = await supabase
+                .from('leagues')
+                .select('id, name')
+                .eq('creator_id', user.id);
+            setMyLeagues(data || []);
+        };
+        fetchOwnedLeagues();
+    }, [user]);
+
+    const handleNameChange = (leagueId) => {
+        setSelectedLeagueId(leagueId);
+        const league = myLeagues.find(l => l.id === leagueId);
+        setNewName(league?.name || '');
+    };
+
+    const handleSubmit = async () => {
+        if (!selectedLeagueId || !newName) {
+            toast({ title: 'Please select a league and provide a new name.', status: 'warning' });
+            return;
+        }
+        setLoading(true);
+        try {
+            const response = await fetch('/.netlify/functions/rename-league', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`
+                },
+                body: JSON.stringify({
+                    league_id: selectedLeagueId,
+                    new_name: newName,
+                }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.message);
+            
+            toast({ title: 'League renamed successfully!', status: 'success' });
+            const { data } = await supabase.from('leagues').select('id, name').eq('creator_id', user.id);
+            setMyLeagues(data || []);
+
+        } catch (error) {
+            toast({ title: 'Error renaming league', description: error.message, status: 'error' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <VStack spacing={4} align="stretch" w="100%">
+            <Heading size="md">Rename a League</Heading>
+            <FormControl>
+                <FormLabel>Select League</FormLabel>
+                <Select placeholder="Select a league you own" value={selectedLeagueId} onChange={(e) => handleNameChange(e.target.value)}>
+                    {myLeagues.map(league => <option key={league.id} value={league.id}>{league.name}</option>)}
+                </Select>
+            </FormControl>
+            {selectedLeagueId && (
+                <FormControl>
+                    <FormLabel>New League Name</FormLabel>
+                    <Input value={newName} onChange={(e) => setNewName(e.target.value)} />
+                </FormControl>
+            )}
+            <Button colorScheme="brand" onClick={handleSubmit} isLoading={loading} isDisabled={!selectedLeagueId || !newName}>
+                Rename League
+            </Button>
+        </VStack>
+    );
+};
+
 const SettleWeekForm = () => {
     const { session } = useAuth();
     const toast = useToast();
     const [weeks, setWeeks] = useState([]);
     const [seasons, setSeasons] = useState([]);
+    const [leagues, setLeagues] = useState([]);
     const [selectedWeek, setSelectedWeek] = useState('');
     const [selectedSeason, setSelectedSeason] = useState('');
+    const [selectedLeagueId, setSelectedLeagueId] = useState('');
     const [loading, setLoading] = useState(false);
   
     useEffect(() => {
@@ -146,13 +227,15 @@ const SettleWeekForm = () => {
         setSeasons(seasonData?.map(s => s.season) || []);
         const { data: weekData } = await supabase.rpc('get_distinct_weeks');
         setWeeks(weekData?.map(w => w.week) || []);
+        const { data: leagueData } = await supabase.from('leagues').select('id, name');
+        setLeagues(leagueData || []);
       };
       fetchOptions();
     }, []);
   
     const handleSubmit = async () => {
-      if (!selectedSeason || !selectedWeek) {
-        toast({ title: 'Please select a season and a week.', status: 'warning' });
+      if (!selectedSeason || !selectedWeek || !selectedLeagueId) {
+        toast({ title: 'Please select a season, week, and league.', status: 'warning' });
         return;
       }
       if (!window.confirm(`Are you sure you want to settle Week ${selectedWeek} for the ${selectedSeason} season? This will grade all picks and cannot be easily undone.`)) {
@@ -169,6 +252,7 @@ const SettleWeekForm = () => {
           body: JSON.stringify({
             season: parseInt(selectedSeason),
             week: parseInt(selectedWeek),
+            league_id: selectedLeagueId,
           }),
         });
         const result = await response.json();
@@ -184,8 +268,14 @@ const SettleWeekForm = () => {
     return (
       <VStack spacing={4} align="stretch" w="100%">
         <Heading size="md">Settle a Week</Heading>
-        <Text fontSize="sm">This action will grade all picks for the selected week and finalize the results.</Text>
+        <Text fontSize="sm">This action grades all picks for the selected week and league.</Text>
         <HStack>
+          <FormControl>
+            <FormLabel>Select League</FormLabel>
+            <Select placeholder="Select league" value={selectedLeagueId} onChange={(e) => setSelectedLeagueId(e.target.value)}>
+              {leagues.map(league => <option key={league.id} value={league.id}>{league.name}</option>)}
+            </Select>
+          </FormControl>
           <FormControl>
             <FormLabel>Select Season</FormLabel>
             <Select placeholder="Select season" value={selectedSeason} onChange={(e) => setSelectedSeason(e.target.value)}>
@@ -199,7 +289,7 @@ const SettleWeekForm = () => {
             </Select>
           </FormControl>
         </HStack>
-        <Button colorScheme="red" onClick={handleSubmit} isLoading={loading} isDisabled={!selectedWeek || !selectedSeason}>
+        <Button colorScheme="red" onClick={handleSubmit} isLoading={loading} isDisabled={!selectedWeek || !selectedSeason || !selectedLeagueId}>
           Settle Week
         </Button>
       </VStack>
@@ -331,9 +421,11 @@ const EditPickForm = () => {
     const [users, setUsers] = useState([]);
     const [weeks, setWeeks] = useState([]);
     const [games, setGames] = useState([]);
+    const [leagues, setLeagues] = useState([]);
     const [selectedUserId, setSelectedUserId] = useState('');
     const [selectedWeek, setSelectedWeek] = useState('');
     const [selectedGameId, setSelectedGameId] = useState('');
+    const [selectedLeagueId, setSelectedLeagueId] = useState('');
     const [selectedPick, setSelectedPick] = useState(null);
     const [newPick, setNewPick] = useState('');
     const [loading, setLoading] = useState(false);
@@ -344,6 +436,8 @@ const EditPickForm = () => {
             setUsers(usersData || []);
             const { data: weeksData } = await supabase.rpc('get_distinct_weeks');
             setWeeks(weeksData?.map(w => w.week) || []);
+            const { data: leagueData } = await supabase.from('leagues').select('id, name');
+            setLeagues(leagueData || []);
         };
         fetchInitialData();
     }, []);
@@ -361,7 +455,7 @@ const EditPickForm = () => {
     }, [selectedWeek]);
 
     useEffect(() => {
-        if (!selectedUserId || !selectedGameId) {
+        if (!selectedUserId || !selectedGameId || !selectedLeagueId) {
             setSelectedPick(null);
             return;
         };
@@ -371,12 +465,13 @@ const EditPickForm = () => {
                 .select('*, games(home_team, away_team)')
                 .eq('user_id', selectedUserId)
                 .eq('game_id', selectedGameId)
+                .eq('league_id', selectedLeagueId)
                 .single();
             setSelectedPick(data);
             setNewPick(data?.selected_team || '');
         };
         fetchPick();
-    }, [selectedUserId, selectedGameId]);
+    }, [selectedUserId, selectedGameId, selectedLeagueId]);
 
     const handleSubmit = async () => {
         if (!selectedPick || !newPick) {
@@ -393,7 +488,8 @@ const EditPickForm = () => {
                 },
                 body: JSON.stringify({
                     pickId: selectedPick.id,
-                    newSelectedTeam: newPick
+                    newSelectedTeam: newPick,
+                    league_id: selectedLeagueId
                 })
             });
             const result = await response.json();
@@ -410,13 +506,19 @@ const EditPickForm = () => {
         <VStack spacing={4} align="stretch" w="100%">
             <Heading size="md">Edit a Player's Pick</Heading>
             <FormControl>
+                <FormLabel>Select League</FormLabel>
+                <Select placeholder="Select league" value={selectedLeagueId} onChange={(e) => setSelectedLeagueId(e.target.value)}>
+                    {leagues.map(league => <option key={league.id} value={league.id}>{league.name}</option>)}
+                </Select>
+            </FormControl>
+            <FormControl>
                 <FormLabel>Select Player</FormLabel>
                 <Select placeholder="Select player" value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)}>
                     {users.map(user => <option key={user.id} value={user.id}>{user.username}</option>)}
                 </Select>
             </FormControl>
             <FormControl>
-                <FormLabel>Select Week</FormLabel>
+                <FormLabel>Select Week</FormLabel> {/* <-- CORRECTED TYPO HERE */}
                 <Select placeholder="Select week" value={selectedWeek} onChange={(e) => { setSelectedGameId(''); setSelectedPick(null); setSelectedWeek(e.target.value); }}>
                     {weeks.map(week => <option key={week} value={week}>Week {week}</option>)}
                 </Select>
@@ -441,7 +543,7 @@ const EditPickForm = () => {
                     </FormControl>
                 </>
             ) : (
-                selectedUserId && selectedGameId && <Text>No pick found for this player and game.</Text>
+                selectedUserId && selectedGameId && selectedLeagueId && <Text>No pick found for this player, game, and league.</Text>
             )}
             <Button colorScheme="brand" onClick={handleSubmit} isLoading={loading} isDisabled={!selectedPick}>Update Pick</Button>
         </VStack>
@@ -455,6 +557,7 @@ export default function Admin() {
       <Heading size="lg" mb={8}>Commissioner Dashboard</Heading>
       <VStack spacing={10} divider={<Divider />}>
         <LeagueSettingsForm />
+        <RenameLeagueForm />
         <SettleWeekForm />
         <CorrectScoreForm />
         <EditPickForm />

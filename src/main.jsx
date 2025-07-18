@@ -2,8 +2,9 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import './index.css';
-import { AuthProvider, useAuth } from './context/AuthContext.jsx'; // <-- Import useAuth here
+import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { SeasonProvider } from './context/SeasonContext.jsx';
+import { LeagueProvider } from './context/LeagueContext.jsx'; // 1. IMPORT THE NEW PROVIDER
 import { ChakraProvider, extendTheme } from '@chakra-ui/react';
 import { BrowserRouter } from 'react-router-dom';
 import { BIG_TEN_TEAMS } from './lib/teams.js';
@@ -59,10 +60,11 @@ const ThemedApp = () => {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
-      {/* AuthProvider now wraps ThemedApp so it has access to the profile */}
       <AuthProvider>
         <SeasonProvider>
-          <ThemedApp />
+          <LeagueProvider> {/* 2. WRAP THE APP WITH THE LEAGUE PROVIDER */}
+            <ThemedApp />
+          </LeagueProvider>
         </SeasonProvider>
       </AuthProvider>
     </BrowserRouter>
